@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}{{ problem.title }}{% endblock %}
+{% block head %}
+<!-- Ace Editor CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/theme-one_dark.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/mode-python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/mode-c_cpp.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container problem-page">
+    <div class="problem-layout">
+        <!-- Left: Problem Statement -->
+        <div class="problem-statement">
+            <div class="card">
+                <div class="problem-title-bar">
+                    <h1>{{ problem.title }}</h1>
+                    <div class="problem-limits">
+                        <span class="limit-badge">⏱ {{ problem.time_limit_ms }}ms</span>
+                        <span class="limit-badge">💾 {{ problem.memory_limit_mb }}MB</span>
+                    </div>
+                </div>
+                <div class="problem-body markdown-body">
+                    {{ problem.description | replace('\n', '<br>') | safe }}
+                </div>
+
+                {% if sample_cases %}
+                <div class="sample-cases">
+                    <h3>Sample Test Cases</h3>
+                    {% for tc in sample_cases %}
+                    <div class="sample-case">
+                        <div class="sample-header">Example {{ loop.index }}</div>
+                        <div class="sample-io">
+                            <div class="sample-block">
+                                <div class="sample-label">Input</div>
+                                <pre class="sample-content">{{ tc.input_data }}</pre>
+                                <button class="copy-btn" onclick="copyText(this)"
+                                    data-text="{{ tc.input_data }}">📋</button>
+                            </div>
+                            <div class="sample-block">
+                                <div class="sample-label">Output</div>
+                                <pre class="sample-content">{{ tc.expected_output }}</pre>
+                                <button class="copy-btn" onclick="copyText(this)"
+                                    data-text="{{ tc.expected_output }}">📋</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right: Code Editor + Submit -->
+        <div class="code-panel">
+            <div class="card editor-card">
+                <form method="POST" action="{{ url_for('student.submit_code', problem_id=problem.id) }}"
+                    id="submitForm">
+                    <div class="editor-toolbar">
+                        <select name="language" id="languageSelect" class="form-select">
+                            {% for key, lang in languages.items() %}
+                            <option value="{{ key }}">{{ lang.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-submit" id="submitBtn">
+                            ▶ Submit
+                        </button>
+                    </div>
+
+                    <div id="editor" class="code-editor"></div>
+                    <textarea name="code" id="codeInput" style="display: none;"></textarea>
+                </form>
+            </div>
+
+            <!-- Previous Submissions -->
+            {% if submissions %}
+            <div class="card">
+                <h3>Recent Submissions</h3>
+                <div class="submission-list">
+                    {% for sub in submissions %}
+                    <a href="{{ url_for('student.view_result', submission_id=sub.id) }}" class="submission-item">
+                        <span class="verdict verdict-{{ sub.verdict }}">{{ sub.verdict }}</span>
+                        <span class="mono">{{ sub.language }}</span>
+                        <span class="mono">{{ (sub.score * 100)|int }}%</span>
+                        <span class="text-secondary">{{ sub.created_at.strftime('%H:%M') }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Initialize Ace Editor
+    const editor = ace.edit("editor");
+    editor.setTheme("ace/theme/one_dark");
+    editor.setFontSize(14);
+    editor.setOptions({
+        fontFamily: "'JetBrains Mono', monospace",
+        showPrintMargin: false,
+        wrap: true,
+        tabSize: 4,
+        useSoftTabs: true,
+    });
+
+    // Language mode mapping
+    const modeMap = {
+        'python': 'ace/mode/python',
+        'c': 'ace/mode/c_cpp',
+        'cpp': 'ace/mode/c_cpp',
+    };
+
+    // Set initial mode
+    const langSelect = document.getElementById('languageSelect');
+    editor.session.setMode(modeMap[langSelect.value] || 'ace/mode/python');
+
+    // Change mode on language select
+    langSelect.addEventListener('change', function () {
+        editor.session.setMode(modeMap[this.value] || 'ace/mode/python');
+    });
+
+    // Set default code templates
+    const templates = {
+        'python': '# Write your solution here\n\n',
+        'c': '#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}\n',
+        'cpp': '#include <iostream>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n',
+    };
+
+    editor.setValue(templates[langSelect.value] || '', -1);
+    langSelect.addEventListener('change', function () {
+        if (editor.getValue().trim() === '' ||
+            Object.values(templates).some(t => editor.getValue().trim() === t.trim())) {
+            editor.setValue(templates[this.value] || '', -1);
+        }
+    });
+
+    // Submit form
+    document.getElementById('submitForm').addEventListener('submit', function (e) {
+        const code = editor.getValue();
+        if (!code.trim()) {
+            e.preventDefault();
+            alert('Please write your code before submitting.');
+            return;
+        }
+        document.getElementById('codeInput').value = code;
+        document.getElementById('submitBtn').disabled = true;
+        document.getElementById('submitBtn').textContent = '⏳ Judging...';
+    });
+
+    // Copy button
+    function copyText(btn) {
+        const text = btn.getAttribute('data-text');
+        navigator.clipboard.writeText(text).then(() => {
+            btn.textContent = '✓';
+            setTimeout(() => btn.textContent = '📋', 1500);
+        });
+    }
+</script>
+{% endblock %}

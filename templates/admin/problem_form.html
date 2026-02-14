@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if problem else 'New' }} Problem{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1>{{ '✏️ Edit Problem' if problem else '➕ New Problem' }}</h1>
+    </div>
+
+    <div class="form-layout">
+        <!-- Problem Form -->
+        <div class="card">
+            <h3>Problem Details</h3>
+            <form method="POST"
+                action="{% if problem %}{{ url_for('admin.edit_problem', problem_id=problem.id) }}{% else %}{{ url_for('admin.new_problem') }}{% endif %}">
+                <div class="form-group">
+                    <label for="title">Title</label>
+                    <input type="text" id="title" name="title" class="form-input"
+                        value="{{ problem.title if problem else '' }}" placeholder="e.g., Two Sum, Fibonacci Sequence"
+                        required>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Problem Description <span class="hint">(Markdown supported)</span></label>
+                    <textarea id="description" name="description" class="form-textarea" rows="12" placeholder="Write the problem statement here. You can use Markdown formatting.
+
+Example:
+## Problem
+Given an array of integers, find two numbers that add up to a target.
+
+## Input
+- First line: n (number of elements) and target
+- Second line: n space-separated integers
+
+## Output
+- Two indices (0-indexed) that add up to target
+
+## Constraints
+- 2 ≤ n ≤ 10^5
+- -10^9 ≤ nums[i] ≤ 10^9" required>{{ problem.description if problem else '' }}</textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="time_limit_ms">Time Limit (ms)</label>
+                        <input type="number" id="time_limit_ms" name="time_limit_ms" class="form-input"
+                            value="{{ problem.time_limit_ms if problem else 2000 }}" min="100" max="10000">
+                    </div>
+                    <div class="form-group">
+                        <label for="memory_limit_mb">Memory Limit (MB)</label>
+                        <input type="number" id="memory_limit_mb" name="memory_limit_mb" class="form-input"
+                            value="{{ problem.memory_limit_mb if problem else 256 }}" min="16" max="512">
+                    </div>
+                </div>
+
+                {% if problem %}
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="is_active" {{ 'checked' if problem.is_active }}>
+                        <span>Active (visible to students)</span>
+                    </label>
+                </div>
+                {% endif %}
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        {{ 'Save Changes' if problem else 'Create Problem' }}
+                    </button>
+                    {% if problem %}
+                    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- Test Cases (only shown when editing) -->
+        {% if problem %}
+        <div class="card">
+            <h3>Test Cases <span class="count-badge">{{ test_cases|length }}</span></h3>
+
+            {% if test_cases %}
+            <div class="test-cases-list">
+                {% for tc in test_cases %}
+                <div class="test-case-item">
+                    <div class="tc-header">
+                        <span class="tc-label">
+                            Test Case #{{ loop.index }}
+                            {% if tc.is_sample %}
+                            <span class="sample-badge">Sample</span>
+                            {% else %}
+                            <span class="hidden-badge">Hidden</span>
+                            {% endif %}
+                        </span>
+                        <form method="POST"
+                            action="{{ url_for('admin.delete_test_case', problem_id=problem.id, tc_id=tc.id) }}"
+                            style="display: inline;" onsubmit="return confirm('Delete this test case?')">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </div>
+                    <div class="tc-content">
+                        <div class="tc-io">
+                            <div>
+                                <label>Input:</label>
+                                <pre class="io-block">{{ tc.input_data }}</pre>
+                            </div>
+                            <div>
+                                <label>Expected Output:</label>
+                                <pre class="io-block">{{ tc.expected_output }}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-secondary">No test cases yet. Add at least one below.</p>
+            {% endif %}
+
+            <hr class="divider">
+
+            <h4>Add Test Case</h4>
+            <form method="POST" action="{{ url_for('admin.add_test_case', problem_id=problem.id) }}">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="input_data">Input</label>
+                        <textarea id="input_data" name="input_data" class="form-textarea mono" rows="4"
+                            placeholder="5 9&#10;2 7 11 15 1" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="expected_output">Expected Output</label>
+                        <textarea id="expected_output" name="expected_output" class="form-textarea mono" rows="4"
+                            placeholder="0 1" required></textarea>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="is_sample">
+                        <span>Sample test case (visible to students)</span>
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-secondary">+ Add Test Case</button>
+            </form>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="card card-danger">
+            <h3>⚠️ Danger Zone</h3>
+            <p class="text-secondary">Deleting a problem removes all its test cases and submissions permanently.</p>
+            <form method="POST" action="{{ url_for('admin.delete_problem', problem_id=problem.id) }}"
+                onsubmit="return confirm('Are you sure? This will delete all test cases and submissions.')">
+                <button type="submit" class="btn btn-danger">Delete Problem</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

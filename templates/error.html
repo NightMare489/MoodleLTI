@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Error{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="error-page">
+        <div class="error-icon">⚠️</div>
+        <h1>Something went wrong</h1>
+        <p class="error-message">{{ error }}</p>
+        <p class="error-hint">Please try launching the tool again from Moodle.</p>
+    </div>
+</div>
+{% endblock %}

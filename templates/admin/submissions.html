@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Submissions - {{ problem.title }}{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1>📊 Submissions</h1>
+            <p class="subtitle">{{ problem.title }}</p>
+        </div>
+        <a href="{{ url_for('admin.edit_problem', problem_id=problem.id) }}" class="btn btn-secondary">← Edit
+            Problem</a>
+    </div>
+
+    {% if submissions %}
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Student</th>
+                    <th>Language</th>
+                    <th>Verdict</th>
+                    <th>Score</th>
+                    <th>Details</th>
+                    <th>Submitted</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in submissions %}
+                <tr>
+                    <td class="mono">{{ sub.id }}</td>
+                    <td>{{ sub.user.name }}</td>
+                    <td class="mono">{{ sub.language }}</td>
+                    <td>
+                        <span class="verdict verdict-{{ sub.verdict }}">{{ sub.verdict }}</span>
+                    </td>
+                    <td class="mono">{{ (sub.score * 100) | int }}%</td>
+                    <td>
+                        {% if sub.parsed_results %}
+                        <div class="mini-results">
+                            {% for r in sub.parsed_results %}
+                            <span class="mini-verdict mini-{{ r.verdict }}"
+                                title="Test {{ loop.index }}: {{ r.verdict }}">
+                                {{ '✓' if r.verdict == 'AC' else '✗' }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="text-secondary">{{ sub.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📭</div>
+        <h3>No submissions yet</h3>
+        <p>Students haven't submitted any solutions for this problem.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

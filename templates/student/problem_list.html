@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Problems{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1>🏆 Problems</h1>
+    </div>
+
+    {% if problems %}
+    <div class="problem-grid">
+        {% for p in problems %}
+        <a href="{{ url_for('student.view_problem', problem_id=p.id) }}" class="problem-card">
+            <div class="problem-card-header">
+                <span class="problem-id">#{{ p.id }}</span>
+                {% if p.user_best %}
+                {% if p.user_best.verdict == 'AC' %}
+                <span class="verdict verdict-AC">Solved ✓</span>
+                {% else %}
+                <span class="verdict verdict-{{ p.user_best.verdict }}">{{ (p.user_best.score * 100)|int }}%</span>
+                {% endif %}
+                {% else %}
+                <span class="verdict verdict-unsolved">Not attempted</span>
+                {% endif %}
+            </div>
+            <h3 class="problem-card-title">{{ p.title }}</h3>
+            <div class="problem-card-meta">
+                <span>⏱ {{ p.time_limit_ms }}ms</span>
+                <span>💾 {{ p.memory_limit_mb }}MB</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📚</div>
+        <h3>No problems available</h3>
+        <p>Check back later for new problems.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

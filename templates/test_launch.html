@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Test LTI Launch{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="card" style="max-width: 600px; margin: 2rem auto;">
+        <h2>🧪 Dev Test Launch</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            Use these buttons to simulate an LTI launch for local testing.
+            <strong>Disable this in production!</strong>
+        </p>
+        <div style="display: flex; gap: 1rem;">
+            <a href="{{ url_for('lti.dev_login', role='instructor') }}" class="btn btn-primary"
+                style="flex: 1; text-align: center;">
+                Login as Instructor
+            </a>
+            <a href="{{ url_for('lti.dev_login', role='student') }}" class="btn btn-secondary"
+                style="flex: 1; text-align: center;">
+                Login as Student
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

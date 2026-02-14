@@ -1,0 +1,50 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+env/
+venv/
+.venv/
+# If you use a different name for your virtual environment, add it here
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Editors and IDEs
+# Flask's own repo ignores .idea/ and .vscode/
+.idea/
+.vscode/
+
+# OS-specific files
+.DS_Store
+*.swp
+
+# Flask-specific
+instance/
+# Typically used for local configuration files and databases that should not be committed
+
+# Specific to testing
+.coverage
+htmlcov/
+.tox/
+
+# Specific to Flask-Migrate (Alembic)
+migrations/versions/
+# You should include the initial migrations folder, but ignore subsequent auto-generated version files
+

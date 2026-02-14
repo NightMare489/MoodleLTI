@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Result #{{ submission.id }}{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1>Submission #{{ submission.id }}</h1>
+            <p class="subtitle">{{ problem.title }}</p>
+        </div>
+        <a href="{{ url_for('student.view_problem', problem_id=problem.id) }}" class="btn btn-secondary">← Back to
+            Problem</a>
+    </div>
+
+    <!-- Overall Verdict -->
+    <div class="verdict-card verdict-card-{{ submission.verdict }}">
+        <div class="verdict-main">
+            <span class="verdict-icon">
+                {% if submission.verdict == 'AC' %}✅
+                {% elif submission.verdict == 'WA' %}❌
+                {% elif submission.verdict == 'TLE' %}⏰
+                {% elif submission.verdict == 'RE' %}💥
+                {% elif submission.verdict == 'CE' %}🔧
+                {% else %}⏳
+                {% endif %}
+            </span>
+            <div>
+                <div class="verdict-label">
+                    {% if submission.verdict == 'AC' %}Accepted
+                    {% elif submission.verdict == 'WA' %}Wrong Answer
+                    {% elif submission.verdict == 'TLE' %}Time Limit Exceeded
+                    {% elif submission.verdict == 'RE' %}Runtime Error
+                    {% elif submission.verdict == 'CE' %}Compilation Error
+                    {% else %}{{ submission.verdict }}
+                    {% endif %}
+                </div>
+                <div class="verdict-details">
+                    Score: {{ (submission.score * 100)|int }}% · Language: {{ submission.language }}
+                </div>
+            </div>
+        </div>
+        <div class="score-circle">
+            <svg viewBox="0 0 36 36" class="score-ring">
+                <path class="score-ring-bg"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path class="score-ring-fill" stroke-dasharray="{{ (submission.score * 100)|int }}, 100"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <span class="score-text">{{ (submission.score * 100)|int }}%</span>
+        </div>
+    </div>
+
+    <!-- Compilation Error -->
+    {% if submission.verdict == 'CE' and submission.error_message %}
+    <div class="card">
+        <h3>🔧 Compilation Error</h3>
+        <pre class="error-output">{{ submission.error_message }}</pre>
+    </div>
+    {% endif %}
+
+    <!-- Test Case Results -->
+    {% if results %}
+    <div class="card">
+        <h3>Test Results</h3>
+        <div class="test-results">
+            {% for r in results %}
+            <div class="test-result test-result-{{ r.verdict }}">
+                <div class="tr-header">
+                    <span class="tr-label">
+                        Test {{ loop.index }}
+                        {% if r.test_case_id in sample_ids %}
+                        <span class="sample-badge">Sample</span>
+                        {% endif %}
+                    </span>
+                    <span class="verdict verdict-{{ r.verdict }}">{{ r.verdict }}</span>
+                    {% if r.time_ms %}
+                    <span class="tr-time">{{ r.time_ms }}ms</span>
+                    {% endif %}
+                </div>
+
+                {% if r.test_case_id in sample_ids %}
+                <div class="tr-details">
+                    {% if r.verdict == 'WA' %}
+                    <div class="tr-diff">
+                        <div>
+                            <span class="tr-diff-label">Expected:</span>
+                            <pre class="io-block">{{ r.expected_output }}</pre>
+                        </div>
+                        <div>
+                            <span class="tr-diff-label">Got:</span>
+                            <pre class="io-block io-wrong">{{ r.actual_output }}</pre>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if r.error %}
+                    <pre class="error-output">{{ r.error }}</pre>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Submitted Code -->
+    <div class="card">
+        <h3>📝 Your Code</h3>
+        <pre class="code-display"><code>{{ submission.code }}</code></pre>
+    </div>
+</div>
+{% endblock %}

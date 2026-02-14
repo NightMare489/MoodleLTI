@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}My Submissions{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1>📜 My Submissions</h1>
+    </div>
+
+    {% if submissions %}
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Problem</th>
+                    <th>Language</th>
+                    <th>Verdict</th>
+                    <th>Score</th>
+                    <th>Submitted</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in submissions %}
+                <tr class="clickable-row"
+                    onclick="window.location='{{ url_for('student.view_result', submission_id=sub.id) }}'">
+                    <td class="mono">{{ sub.id }}</td>
+                    <td><strong>{{ sub.problem.title }}</strong></td>
+                    <td class="mono">{{ sub.language }}</td>
+                    <td>
+                        <span class="verdict verdict-{{ sub.verdict }}">{{ sub.verdict }}</span>
+                    </td>
+                    <td class="mono">{{ (sub.score * 100)|int }}%</td>
+                    <td class="text-secondary">{{ sub.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📝</div>
+        <h3>No submissions yet</h3>
+        <p>Solve a problem to see your submissions here.</p>
+        <a href="{{ url_for('student.problem_list') }}" class="btn btn-primary">Browse Problems</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
