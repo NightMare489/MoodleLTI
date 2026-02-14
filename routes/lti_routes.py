@@ -19,17 +19,17 @@ def _make_launch_token(data):
 
     Used to pass the session through a URL query parameter when
     third-party cookies are blocked (e.g. Chrome incognito inside an
-    iframe).  Token expires after 60 seconds — just enough for the
-    client-side redirect to arrive.
+    iframe).  Token is valid for 24 hours (the full session lifetime).
     """
     s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
     return s.dumps(data, salt='lti-launch')
 
 
-def verify_launch_token(token, max_age=60):
+def verify_launch_token(token, max_age=86400):
     """Verify and decode a launch token.
 
     Returns the payload dict, or None if invalid / expired.
+    Default max_age is 24 hours.
     """
     s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
     try:

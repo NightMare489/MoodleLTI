@@ -137,8 +137,10 @@ def extract_lti_user_data(params):
 
     return {
         'lti_user_id': params.get('user_id', ''),
-        'name': params.get('lis_person_name_full',
-                           params.get('lis_person_name_given', 'Unknown')),
+        'name': (params.get('lis_person_name_full')
+                 or params.get('lis_person_name_given')
+                 or params.get('lis_person_sourcedid')   # reg number
+                 or params.get('user_id', 'Unknown')),
         'email': params.get('lis_person_contact_email_primary', ''),
         'role': 'instructor' if is_instructor else 'student',
         'context_id': params.get('context_id', ''),
@@ -148,40 +150,21 @@ def extract_lti_user_data(params):
     }
 
 
-def _restore_session_from_token():
-    """Try to restore the Flask session from a signed URL token.
-
-    When third-party cookies are blocked (e.g. Chrome incognito in an
-    iframe), the cookie session will be empty after the redirect.  The
-    LTI launch handler appends a signed ``_lt`` query-param that carries
-    the session payload so we can recover it here.
-
-    Returns True if the session was restored, False otherwise.
-    """
-    token = request.args.get('_lt')
-    if not token:
-        return False
-
-    from routes.lti_routes import verify_launch_token
-    data = verify_launch_token(token, max_age=120)
-    if data and 'user_id' in data:
-        session['user_id'] = data['user_id']
-        session['user_name'] = data['user_name']
-        session['role'] = data['role']
-        session['lti_session_id'] = data['lti_session_id']
-        session.modified = True
-        return True
-    return False
-
-
 def require_lti_session(f):
-    """Decorator to ensure the user has a valid LTI session."""
+    """Decorator to ensure the user has a valid LTI session.
+
+    The before_request handler in app.py restores the session from the
+    _lt URL token when cookies are blocked, so by the time we get here
+    the session should already be populated (either via cookie or token).
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
-            # Fallback: try to restore from signed URL token
-            if not _restore_session_from_token():
-                abort(403, description='No active LTI session. Please launch from Moodle.')
+            abort(403, description=(
+                'No active LTI session. Please launch from Moodle. '
+                '(If you are in incognito mode, the session token may '
+                'have expired — try relaunching.)'
+            ))
         return f(*args, **kwargs)
     return decorated
 
@@ -191,8 +174,11 @@ def require_instructor(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
-            if not _restore_session_from_token():
-                abort(403, description='No active LTI session. Please launch from Moodle.')
+            abort(403, description=(
+                'No active LTI session. Please launch from Moodle. '
+                '(If you are in incognito mode, the session token may '
+                'have expired — try relaunching.)'
+            ))
         if session.get('role') != 'instructor':
             abort(403, description='Instructor access required.')
         return f(*args, **kwargs)

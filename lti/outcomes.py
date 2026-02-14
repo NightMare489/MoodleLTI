@@ -3,8 +3,13 @@ LTI Basic Outcomes Service - Grade Passback to Moodle.
 
 Sends grades (0.0 to 1.0) back to Moodle's gradebook using the
 LTI Basic Outcomes POX (Plain Old XML) protocol.
+
+When GRADE_PROXY_URL is set the request is routed through a Google
+Apps Script web-app that forwards it to Moodle (useful when the
+server cannot reach the LMS directly).
 """
 
+import json
 import time
 import uuid
 import hashlib
@@ -88,6 +93,9 @@ def _build_replace_result_xml(sourcedid, score):
 def send_grade(outcome_url, sourcedid, score):
     """Send a grade back to Moodle via LTI Basic Outcomes.
 
+    If GRADE_PROXY_URL is configured, the OAuth-signed request is sent
+    to a Google Apps Script web-app which forwards it to Moodle.
+
     Args:
         outcome_url: The lis_outcome_service_url from LTI launch
         sourcedid: The lis_result_sourcedid from LTI launch
@@ -99,6 +107,10 @@ def send_grade(outcome_url, sourcedid, score):
     if not outcome_url or not sourcedid:
         return False, 'No outcome URL or sourcedid available (grade passback not configured)'
 
+    print("Outcome URL:", outcome_url)
+    print("Sourced ID:", sourcedid)
+    print("Score:", score)
+
     consumer_key = current_app.config['LTI_KEY']
     consumer_secret = current_app.config['LTI_SECRET']
 
@@ -108,8 +120,7 @@ def send_grade(outcome_url, sourcedid, score):
     # Build XML body
     xml_body = _build_replace_result_xml(sourcedid, score)
 
-    # Build OAuth parameters
-    # For body-hash based signing (LTI outcomes uses body hash)
+    # Build OAuth parameters (body-hash based signing)
     body_hash = base64.b64encode(
         hashlib.sha1(xml_body.encode('utf-8')).digest()
     ).decode('utf-8')
@@ -128,22 +139,43 @@ def send_grade(outcome_url, sourcedid, score):
         for k, v in sorted(oauth_params.items())
     )
 
-    # Send the request
+    # ---------- Route through proxy or direct ----------
+    proxy_url = current_app.config.get('GRADE_PROXY_URL', '')
+
     try:
-        response = requests.post(
-            outcome_url,
-            data=xml_body,
-            headers={
-                'Content-Type': 'application/xml',
-                'Authorization': auth_header,
-            },
-            timeout=10
-        )
+        if proxy_url:
+            # Send as JSON envelope to Google Apps Script proxy
+            payload = {
+                'target_url': outcome_url,
+                'xml_body': xml_body,
+                'auth_header': auth_header,
+            }
+            print(f"[proxy] Sending grade to proxy: {proxy_url}")
+            response = requests.post(
+                proxy_url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=15,
+            )
+        else:
+            # Direct POST to Moodle
+            response = requests.post(
+                outcome_url,
+                data=xml_body,
+                headers={
+                    'Content-Type': 'application/xml',
+                    'Authorization': auth_header,
+                },
+                timeout=10,
+            )
 
         if response.status_code == 200 and 'success' in response.text.lower():
+            print("Grade sent successfully", score)
             return True, 'Grade sent successfully'
         else:
+            print(f"Moodle returned: {response.status_code} - {response.text[:500]}")
             return False, f'Moodle returned: {response.status_code} - {response.text[:200]}'
 
     except requests.RequestException as e:
         return False, f'Failed to send grade: {str(e)}'
+

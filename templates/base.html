@@ -1,35 +1,40 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}CodeJudge{% endblock %} | AAST Online Judge</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block head %}{% endblock %}
 </head>
+
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="{% if session.get('role') == 'instructor' %}{{ url_for('admin.dashboard') }}{% else %}{{ url_for('student.problem_list') }}{% endif %}" class="nav-brand">
+            <a href="{% if session.get('role') == 'instructor' %}{{ url_for('admin.dashboard') }}{% else %}{{ url_for('student.problem_list') }}{% endif %}"
+                class="nav-brand">
                 <span class="brand-icon">⚡</span>
                 <span class="brand-text">CodeJudge</span>
             </a>
             <div class="nav-links">
                 {% if session.get('role') == 'instructor' %}
-                    <a href="{{ url_for('admin.dashboard') }}" class="nav-link">Dashboard</a>
-                    <a href="{{ url_for('admin.new_problem') }}" class="nav-link">+ New Problem</a>
+                <a href="{{ url_for('admin.dashboard') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('admin.new_problem') }}" class="nav-link">+ New Problem</a>
                 {% else %}
-                    <a href="{{ url_for('student.problem_list') }}" class="nav-link">Problems</a>
-                    <a href="{{ url_for('student.my_submissions') }}" class="nav-link">My Submissions</a>
+                <a href="{{ url_for('student.problem_list') }}" class="nav-link">Problems</a>
+                <a href="{{ url_for('student.my_submissions') }}" class="nav-link">My Submissions</a>
                 {% endif %}
                 {% if session.get('user_name') %}
-                    <span class="nav-user">
-                        <span class="user-avatar">{{ session.user_name[0] | upper }}</span>
-                        {{ session.user_name }}
-                        <span class="role-badge role-{{ session.role }}">{{ session.role }}</span>
-                    </span>
+                <span class="nav-user">
+                    <span class="user-avatar">{{ session.user_name[0] | upper }}</span>
+                    {{ session.user_name }}
+                    <span class="role-badge role-{{ session.role }}">{{ session.role }}</span>
+                </span>
                 {% endif %}
             </div>
         </div>
@@ -37,16 +42,16 @@
 
     <main class="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="flash-messages">
-                    {% for category, message in messages %}
-                        <div class="flash flash-{{ category }}">
-                            {{ message }}
-                            <button class="flash-close" onclick="this.parentElement.remove()">×</button>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                {{ message }}
+                <button class="flash-close" onclick="this.parentElement.remove()">×</button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
         {% endwith %}
 
         {% block content %}{% endblock %}
@@ -62,4 +67,5 @@
 
     {% block scripts %}{% endblock %}
 </body>
+
 </html>

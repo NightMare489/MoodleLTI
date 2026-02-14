@@ -15,6 +15,14 @@ from judge.runner import judge_submission
 student_bp = Blueprint('student', __name__)
 
 
+def _token_redirect(endpoint, **kwargs):
+    """redirect() that propagates the _lt session token."""
+    token = getattr(request, '_session_token', '') or request.args.get('_lt', '')
+    if token:
+        kwargs['_lt'] = token
+    return redirect(url_for(endpoint, **kwargs))
+
+
 @student_bp.route('/problems')
 @require_lti_session
 def problem_list():
@@ -40,7 +48,7 @@ def view_problem(problem_id):
     problem = Problem.query.get_or_404(problem_id)
     if not problem.is_active:
         flash('This problem is not currently available.', 'error')
-        return redirect(url_for('student.problem_list'))
+        return _token_redirect('student.problem_list')
 
     sample_cases = TestCase.query.filter_by(
         problem_id=problem_id, is_sample=True
@@ -68,18 +76,18 @@ def submit_code(problem_id):
     problem = Problem.query.get_or_404(problem_id)
     if not problem.is_active:
         flash('This problem is not currently available.', 'error')
-        return redirect(url_for('student.problem_list'))
+        return _token_redirect('student.problem_list')
 
     code = request.form.get('code', '').strip()
     language = request.form.get('language', 'python')
 
     if not code:
         flash('Please enter your code.', 'error')
-        return redirect(url_for('student.view_problem', problem_id=problem_id))
+        return _token_redirect('student.view_problem', problem_id=problem_id)
 
     if language not in current_app.config['SUPPORTED_LANGUAGES']:
         flash('Unsupported language.', 'error')
-        return redirect(url_for('student.view_problem', problem_id=problem_id))
+        return _token_redirect('student.view_problem', problem_id=problem_id)
 
     # Get all test cases (not just samples)
     test_cases = TestCase.query.filter_by(problem_id=problem_id)\
@@ -87,7 +95,7 @@ def submit_code(problem_id):
 
     if not test_cases:
         flash('No test cases available for this problem.', 'error')
-        return redirect(url_for('student.view_problem', problem_id=problem_id))
+        return _token_redirect('student.view_problem', problem_id=problem_id)
 
     # Run the judge
     result = judge_submission(
@@ -112,27 +120,29 @@ def submit_code(problem_id):
     db.session.add(submission)
     db.session.commit()
 
-    # Attempt grade passback to Moodle
+    # Attempt grade passback to Moodle (binary: 1 = solved, 0 = not)
     lti_session_id = session.get('lti_session_id')
     if lti_session_id:
         lti_sess = LTISession.query.get(lti_session_id)
         if lti_sess and lti_sess.outcome_service_url:
-            # Send the best score for this problem (not just this submission)
-            best_submission = Submission.query.filter_by(
-                user_id=session['user_id'], problem_id=problem_id
-            ).order_by(Submission.score.desc()).first()
+            # Check if the student has ANY accepted submission for this problem
+            has_ac = Submission.query.filter_by(
+                user_id=session['user_id'],
+                problem_id=problem_id,
+                verdict='AC'
+            ).first() is not None
 
-            best_score = best_submission.score if best_submission else result['score']
+            grade = 1.0 if has_ac else 0.0
 
             success, msg = send_grade(
                 lti_sess.outcome_service_url,
                 lti_sess.result_sourcedid,
-                best_score
+                grade
             )
             if not success:
                 current_app.logger.warning(f'Grade passback failed: {msg}')
 
-    return redirect(url_for('student.view_result', submission_id=submission.id))
+    return _token_redirect('student.view_result', submission_id=submission.id)
 
 
 @student_bp.route('/submission/<int:submission_id>')
@@ -144,7 +154,7 @@ def view_result(submission_id):
     # Only allow viewing own submissions (unless instructor)
     if submission.user_id != session['user_id'] and session.get('role') != 'instructor':
         flash('You do not have permission to view this submission.', 'error')
-        return redirect(url_for('student.problem_list'))
+        return _token_redirect('student.problem_list')
 
     problem = Problem.query.get(submission.problem_id)
 

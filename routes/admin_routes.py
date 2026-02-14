@@ -13,6 +13,14 @@ from lti.auth import require_instructor
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 
+def _token_redirect(endpoint, **kwargs):
+    """redirect() that propagates the _lt session token."""
+    token = getattr(request, '_session_token', '') or request.args.get('_lt', '')
+    if token:
+        kwargs['_lt'] = token
+    return redirect(url_for(endpoint, **kwargs))
+
+
 @admin_bp.route('/dashboard')
 @require_instructor
 def dashboard():
@@ -36,7 +44,7 @@ def new_problem():
         db.session.add(problem)
         db.session.commit()
         flash('Problem created successfully!', 'success')
-        return redirect(url_for('admin.edit_problem', problem_id=problem.id))
+        return _token_redirect('admin.edit_problem', problem_id=problem.id)
 
     return render_template('admin/problem_form.html', problem=None)
 
@@ -55,7 +63,7 @@ def edit_problem(problem_id):
         problem.is_active = 'is_active' in request.form
         db.session.commit()
         flash('Problem updated successfully!', 'success')
-        return redirect(url_for('admin.edit_problem', problem_id=problem.id))
+        return _token_redirect('admin.edit_problem', problem_id=problem.id)
 
     test_cases = TestCase.query.filter_by(problem_id=problem.id)\
         .order_by(TestCase.order).all()
@@ -79,7 +87,7 @@ def add_test_case(problem_id):
     db.session.add(tc)
     db.session.commit()
     flash('Test case added!', 'success')
-    return redirect(url_for('admin.edit_problem', problem_id=problem.id))
+    return _token_redirect('admin.edit_problem', problem_id=problem.id)
 
 
 @admin_bp.route('/problem/<int:problem_id>/testcase/<int:tc_id>/delete', methods=['POST'])
@@ -89,12 +97,12 @@ def delete_test_case(problem_id, tc_id):
     tc = TestCase.query.get_or_404(tc_id)
     if tc.problem_id != problem_id:
         flash('Invalid test case.', 'error')
-        return redirect(url_for('admin.edit_problem', problem_id=problem_id))
+        return _token_redirect('admin.edit_problem', problem_id=problem_id)
 
     db.session.delete(tc)
     db.session.commit()
     flash('Test case deleted.', 'success')
-    return redirect(url_for('admin.edit_problem', problem_id=problem_id))
+    return _token_redirect('admin.edit_problem', problem_id=problem_id)
 
 
 @admin_bp.route('/problem/<int:problem_id>/submissions')
@@ -128,4 +136,4 @@ def delete_problem(problem_id):
     db.session.delete(problem)
     db.session.commit()
     flash('Problem deleted.', 'success')
-    return redirect(url_for('admin.dashboard'))
+    return _token_redirect('admin.dashboard')
