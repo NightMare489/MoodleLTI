@@ -100,12 +100,16 @@ def launch():
     db.session.add(lti_session)
     db.session.commit()
 
+    # If a specific problem was requested, lock the student to it
+    locked_problem = params.get('custom_problem_id') or None
+
     # Session data
     sess_data = {
         'user_id': user.id,
         'user_name': user.name,
         'role': user.role,
         'lti_session_id': lti_session.id,
+        'locked_problem_id': int(locked_problem) if locked_problem else None,
     }
 
     # Try to set the Flask cookie session (works when cookies aren't blocked)
@@ -113,6 +117,7 @@ def launch():
     session['user_name'] = sess_data['user_name']
     session['role'] = sess_data['role']
     session['lti_session_id'] = sess_data['lti_session_id']
+    session['locked_problem_id'] = sess_data['locked_problem_id']
     session.modified = True
 
     # Also create a signed URL token as a fallback for when
@@ -123,9 +128,8 @@ def launch():
     if user.role == 'instructor':
         target = url_for('admin.dashboard', _lt=token)
     else:
-        problem_id = params.get('custom_problem_id')
-        if problem_id:
-            target = url_for('student.view_problem', problem_id=problem_id, _lt=token)
+        if locked_problem:
+            target = url_for('student.view_problem', problem_id=locked_problem, _lt=token)
         else:
             target = url_for('student.problem_list', _lt=token)
 

@@ -14,20 +14,25 @@
 </head>
 
 <body>
-    <nav class="navbar">
+    {% set locked = session.get('locked_problem_id') and session.get('role') != 'instructor' %}
+    <nav class="navbar" {% if locked %} style="justify-content:center" {% endif %}>
         <div class="nav-container">
+            {% if not locked %}
             <a href="{% if session.get('role') == 'instructor' %}{{ url_for('admin.dashboard') }}{% else %}{{ url_for('student.problem_list') }}{% endif %}"
                 class="nav-brand">
                 <span class="brand-icon">⚡</span>
                 <span class="brand-text">CodeJudge</span>
             </a>
+            {% endif %}
             <div class="nav-links">
+                {% if not locked %}
                 {% if session.get('role') == 'instructor' %}
                 <a href="{{ url_for('admin.dashboard') }}" class="nav-link">Dashboard</a>
                 <a href="{{ url_for('admin.new_problem') }}" class="nav-link">+ New Problem</a>
                 {% else %}
                 <a href="{{ url_for('student.problem_list') }}" class="nav-link">Problems</a>
                 <a href="{{ url_for('student.my_submissions') }}" class="nav-link">My Submissions</a>
+                {% endif %}
                 {% endif %}
                 {% if session.get('user_name') %}
                 <span class="nav-user">

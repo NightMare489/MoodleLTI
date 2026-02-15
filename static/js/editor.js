@@ -20,6 +20,27 @@ document.addEventListener("DOMContentLoaded", function () {
         enableLiveAutocompletion: true,
     });
 
+    // ── MSVC _s functions: autocomplete + highlight ─────────────────
+    const msvcFunctions = [
+        "scanf_s", "printf_s", "sscanf_s", "fscanf_s",
+        "sprintf_s", "fprintf_s", "gets_s", "fopen_s",
+    ];
+    const msvcRegex = "\\b(" + msvcFunctions.join("|") + ")\\b";
+
+    // Add them to the autocomplete list
+    if (ace.require) {
+        var langTools = ace.require("ace/ext/language_tools");
+        if (langTools) {
+            langTools.addCompleter({
+                getCompletions: function (_editor, _session, _pos, _prefix, cb) {
+                    cb(null, msvcFunctions.map(function (fn) {
+                        return { caption: fn, value: fn + "(", meta: "MSVC function" };
+                    }));
+                },
+            });
+        }
+    }
+
     // ── Language → Ace mode mapping ─────────────────────────────────
     const langModes = {
         python: "ace/mode/python",
@@ -37,9 +58,30 @@ document.addEventListener("DOMContentLoaded", function () {
     // ── Language selector ───────────────────────────────────────────
     const langSelect = document.getElementById("language-select");
 
+    var _msvcPatched = false;
+
     function setLanguage(lang) {
-        const mode = langModes[lang] || "ace/mode/text";
-        editor.session.setMode(mode);
+        const modePath = langModes[lang] || "ace/mode/text";
+
+        // setMode with callback — fires only after the mode is fully loaded
+        editor.session.setMode(modePath, function () {
+            // Patch MSVC function highlighting for C modes
+            if ((lang === "c" || lang === "cpp") && !_msvcPatched) {
+                var mode = editor.session.getMode();
+                if (mode && mode.$highlightRules) {
+                    var rules = mode.$highlightRules.getRules();
+                    if (rules && rules["start"]) {
+                        rules["start"].unshift({
+                            token: "support.function.c",
+                            regex: msvcRegex,
+                        });
+                        // force re-tokenisation
+                        editor.session.bgTokenizer.start(0);
+                        _msvcPatched = true;
+                    }
+                }
+            }
+        });
 
         // Only set template if editor is empty or still has a template
         const current = editor.getValue().trim();

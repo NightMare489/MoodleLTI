@@ -27,6 +27,11 @@ def _token_redirect(endpoint, **kwargs):
 @require_lti_session
 def problem_list():
     """List all active problems."""
+    # If the student is locked to a specific problem, redirect them there
+    locked = session.get('locked_problem_id')
+    if locked:
+        return _token_redirect('student.view_problem', problem_id=locked)
+
     problems = Problem.query.filter_by(is_active=True)\
         .order_by(Problem.created_at.desc()).all()
 
@@ -45,6 +50,11 @@ def problem_list():
 @require_lti_session
 def view_problem(problem_id):
     """View a problem statement with sample test cases and code editor."""
+    # Enforce navigation lock
+    locked = session.get('locked_problem_id')
+    if locked and int(locked) != problem_id:
+        return _token_redirect('student.view_problem', problem_id=locked)
+
     problem = Problem.query.get_or_404(problem_id)
     if not problem.is_active:
         flash('This problem is not currently available.', 'error')
@@ -151,6 +161,11 @@ def view_result(submission_id):
     """View the result of a submission."""
     submission = Submission.query.get_or_404(submission_id)
 
+    # Enforce navigation lock — can only view results for the locked problem
+    locked = session.get('locked_problem_id')
+    if locked and submission.problem_id != int(locked):
+        return _token_redirect('student.view_problem', problem_id=locked)
+
     # Only allow viewing own submissions (unless instructor)
     if submission.user_id != session['user_id'] and session.get('role') != 'instructor':
         flash('You do not have permission to view this submission.', 'error')
@@ -181,6 +196,11 @@ def view_result(submission_id):
 @require_lti_session
 def my_submissions():
     """View all of the current user's submissions."""
+    # If the student is locked to a specific problem, redirect them there
+    locked = session.get('locked_problem_id')
+    if locked:
+        return _token_redirect('student.view_problem', problem_id=locked)
+
     user_id = session['user_id']
     submissions = Submission.query.filter_by(user_id=user_id)\
         .order_by(Submission.created_at.desc()).all()

@@ -57,6 +57,7 @@ def create_app(config_class=Config):
                     'user_name': session.get('user_name', ''),
                     'role': session.get('role', 'student'),
                     'lti_session_id': session.get('lti_session_id'),
+                    'locked_problem_id': session.get('locked_problem_id'),
                 })
             return
 
@@ -71,6 +72,7 @@ def create_app(config_class=Config):
             session['user_name'] = data.get('user_name', '')
             session['role'] = data.get('role', 'student')
             session['lti_session_id'] = data.get('lti_session_id')
+            session['locked_problem_id'] = data.get('locked_problem_id')
             session.modified = True
             request._session_token = token
         else:

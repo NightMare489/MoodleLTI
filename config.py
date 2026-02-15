@@ -41,22 +41,10 @@ class Config:
 
     # Supported languages
     SUPPORTED_LANGUAGES = {
-        'python': {
-            'name': 'Python 3',
-            'extension': '.py',
-            'compile_cmd': None,
-            'run_cmd': 'python3 {file}',
-        },
         'c': {
             'name': 'C (GCC)',
             'extension': '.c',
-            'compile_cmd': 'gcc -o {output} {file} -lm',
-            'run_cmd': '{output}',
-        },
-        'cpp': {
-            'name': 'C++ (G++)',
-            'extension': '.cpp',
-            'compile_cmd': 'g++ -o {output} {file} -lm',
+            'compile_cmd': 'gcc -o {output} {file} -lm -Dscanf_s=scanf',
             'run_cmd': '{output}',
         },
     }
