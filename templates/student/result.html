@@ -5,10 +5,19 @@
     <div class="page-header">
         <div>
             <h1>Submission #{{ submission.id }}</h1>
-            <p class="subtitle">{{ problem.title }}</p>
+            <p class="subtitle">{{ problem.title }}
+                {% if session.get('role') == 'instructor' and submission.user %}
+                — by {{ submission.user.name }}
+                {% endif %}
+            </p>
         </div>
+        {% if session.get('role') == 'instructor' %}
+        <a href="{{ url_for('admin.view_submissions', problem_id=problem.id) }}" class="btn btn-secondary">← Back to
+            Submissions</a>
+        {% else %}
         <a href="{{ url_for('student.view_problem', problem_id=problem.id) }}" class="btn btn-secondary">← Back to
             Problem</a>
+        {% endif %}
     </div>
 
     <!-- Overall Verdict -->
@@ -104,7 +113,7 @@
 
     <!-- Submitted Code -->
     <div class="card">
-        <h3>📝 Your Code</h3>
+        <h3>📝 {{ 'Student Code' if session.get('role') == 'instructor' else 'Your Code' }}</h3>
         <pre class="code-display"><code>{{ submission.code }}</code></pre>
     </div>
 </div>
