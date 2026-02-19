@@ -45,6 +45,63 @@
     --transition: 0.2s ease;
 }
 
+/* --- Light Theme --- */
+[data-theme="light"] {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-card: #ffffff;
+    --bg-hover: #f3f4f6;
+    --bg-input: #ffffff;
+
+    --border: #d1d9e0;
+    --border-focus: #0969da;
+
+    --text-primary: #1f2328;
+    --text-secondary: #59636e;
+    --text-muted: #8b949e;
+
+    --accent: #0969da;
+    --accent-hover: #0550ae;
+    --accent-bg: rgba(9, 105, 218, 0.08);
+
+    --green: #1a7f37;
+    --green-bg: rgba(26, 127, 55, 0.08);
+    --red: #d1242f;
+    --red-bg: rgba(209, 36, 47, 0.08);
+    --yellow: #9a6700;
+    --yellow-bg: rgba(154, 103, 0, 0.08);
+    --purple: #8250df;
+    --purple-bg: rgba(130, 80, 223, 0.08);
+    --orange: #bc4c00;
+
+    --shadow: 0 1px 3px rgba(31, 35, 40, 0.08), 0 1px 2px rgba(31, 35, 40, 0.06);
+    --shadow-lg: 0 4px 12px rgba(31, 35, 40, 0.12);
+}
+
+/* --- Theme Toggle --- */
+.theme-toggle {
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all var(--transition);
+    padding: 0;
+    margin-left: 0.5rem;
+}
+
+.theme-toggle:hover {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 /* --- Reset & Base --- */
 *,
 *::before,
@@ -528,10 +585,25 @@ a:hover {
     font-weight: 700;
 }
 
-.mini-AC { background: var(--green-bg); color: var(--green); }
-.mini-WA { background: var(--red-bg); color: var(--red); }
-.mini-TLE { background: var(--yellow-bg); color: var(--yellow); }
-.mini-RE { background: var(--purple-bg); color: var(--purple); }
+.mini-AC {
+    background: var(--green-bg);
+    color: var(--green);
+}
+
+.mini-WA {
+    background: var(--red-bg);
+    color: var(--red);
+}
+
+.mini-TLE {
+    background: var(--yellow-bg);
+    color: var(--yellow);
+}
+
+.mini-RE {
+    background: var(--purple-bg);
+    color: var(--purple);
+}
 
 /* --- Problem Cards (Student) --- */
 .problem-grid {
@@ -896,9 +968,17 @@ a:hover {
     transition: stroke-dasharray 0.6s ease;
 }
 
-.verdict-card-WA .score-ring-fill { stroke: var(--red); }
-.verdict-card-TLE .score-ring-fill { stroke: var(--yellow); }
-.verdict-card-RE .score-ring-fill { stroke: var(--purple); }
+.verdict-card-WA .score-ring-fill {
+    stroke: var(--red);
+}
+
+.verdict-card-TLE .score-ring-fill {
+    stroke: var(--yellow);
+}
+
+.verdict-card-RE .score-ring-fill {
+    stroke: var(--purple);
+}
 
 .score-text {
     position: absolute;
@@ -1179,6 +1259,7 @@ a:hover {
         opacity: 0;
         transform: translateY(-8px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);

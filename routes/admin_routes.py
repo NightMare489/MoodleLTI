@@ -2,15 +2,23 @@
 Admin/Instructor Routes.
 
 Dashboard for creating/editing problems, managing test cases,
-and viewing student submissions.
+uploading images, and generating test-case output.
 """
 
+import os
 import json
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-from models.database import db, Problem, TestCase, Submission, User
+import uuid
+import tempfile
+from flask import (Blueprint, render_template, request, redirect,
+                   url_for, flash, session, current_app, jsonify)
+from werkzeug.utils import secure_filename
+from models.database import db, Problem, TestCase, Submission, User, ProblemImage
 from lti.auth import require_instructor
+from judge.runner import compile_code, run_test_case
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'}
 
 
 def _token_redirect(endpoint, **kwargs):
@@ -21,6 +29,19 @@ def _token_redirect(endpoint, **kwargs):
     return redirect(url_for(endpoint, **kwargs))
 
 
+def _allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def _uploads_dir(problem_id):
+    """Return (and create) the upload directory for a problem."""
+    base = os.path.join(current_app.root_path, 'static', 'uploads', str(problem_id))
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+# ── Dashboard ────────────────────────────────────────────────────────
+
 @admin_bp.route('/dashboard')
 @require_instructor
 def dashboard():
@@ -28,6 +49,8 @@ def dashboard():
     problems = Problem.query.order_by(Problem.created_at.desc()).all()
     return render_template('admin/dashboard.html', problems=problems)
 
+
+# ── Create / Edit Problem ────────────────────────────────────────────
 
 @admin_bp.route('/problem/new', methods=['GET', 'POST'])
 @require_instructor
@@ -39,6 +62,8 @@ def new_problem():
             description=request.form.get('description', '').strip(),
             time_limit_ms=int(request.form.get('time_limit_ms', 2000)),
             memory_limit_mb=int(request.form.get('memory_limit_mb', 256)),
+            solution_code=request.form.get('solution_code', '').strip(),
+            solution_language=request.form.get('solution_language', 'c'),
             created_by=session['user_id'],
         )
         db.session.add(problem)
@@ -46,7 +71,9 @@ def new_problem():
         flash('Problem created successfully!', 'success')
         return _token_redirect('admin.edit_problem', problem_id=problem.id)
 
-    return render_template('admin/problem_form.html', problem=None)
+    languages = current_app.config['SUPPORTED_LANGUAGES']
+    return render_template('admin/problem_form.html', problem=None,
+                           languages=languages)
 
 
 @admin_bp.route('/problem/<int:problem_id>/edit', methods=['GET', 'POST'])
@@ -61,15 +88,76 @@ def edit_problem(problem_id):
         problem.time_limit_ms = int(request.form.get('time_limit_ms', 2000))
         problem.memory_limit_mb = int(request.form.get('memory_limit_mb', 256))
         problem.is_active = 'is_active' in request.form
+        problem.solution_code = request.form.get('solution_code', '').strip()
+        problem.solution_language = request.form.get('solution_language', 'c')
         db.session.commit()
         flash('Problem updated successfully!', 'success')
         return _token_redirect('admin.edit_problem', problem_id=problem.id)
 
     test_cases = TestCase.query.filter_by(problem_id=problem.id)\
         .order_by(TestCase.order).all()
+    images = ProblemImage.query.filter_by(problem_id=problem.id)\
+        .order_by(ProblemImage.created_at).all()
+    languages = current_app.config['SUPPORTED_LANGUAGES']
     return render_template('admin/problem_form.html',
-                           problem=problem, test_cases=test_cases)
+                           problem=problem, test_cases=test_cases,
+                           images=images, languages=languages)
 
+
+# ── Image Upload / Delete ────────────────────────────────────────────
+
+@admin_bp.route('/problem/<int:problem_id>/image', methods=['POST'])
+@require_instructor
+def upload_image(problem_id):
+    """Upload an image asset for a problem."""
+    problem = Problem.query.get_or_404(problem_id)
+    file = request.files.get('image')
+
+    if not file or file.filename == '':
+        flash('No file selected.', 'error')
+        return _token_redirect('admin.edit_problem', problem_id=problem.id)
+
+    if not _allowed_file(file.filename):
+        flash('Invalid file type. Use PNG, JPG, GIF, SVG, or WEBP.', 'error')
+        return _token_redirect('admin.edit_problem', problem_id=problem.id)
+
+    # Generate a unique filename to avoid collisions
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    safe_name = secure_filename(file.filename.rsplit('.', 1)[0])
+    unique_name = f"{safe_name}_{uuid.uuid4().hex[:8]}.{ext}"
+
+    dest = os.path.join(_uploads_dir(problem.id), unique_name)
+    file.save(dest)
+
+    img = ProblemImage(problem_id=problem.id, filename=unique_name)
+    db.session.add(img)
+    db.session.commit()
+
+    flash(f'Image uploaded! Use: ![description](image:{unique_name})', 'success')
+    return _token_redirect('admin.edit_problem', problem_id=problem.id)
+
+
+@admin_bp.route('/problem/<int:problem_id>/image/<int:img_id>/delete', methods=['POST'])
+@require_instructor
+def delete_image(problem_id, img_id):
+    """Delete an uploaded image."""
+    img = ProblemImage.query.get_or_404(img_id)
+    if img.problem_id != problem_id:
+        flash('Invalid image.', 'error')
+        return _token_redirect('admin.edit_problem', problem_id=problem_id)
+
+    # Remove file from disk
+    filepath = os.path.join(_uploads_dir(problem_id), img.filename)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+
+    db.session.delete(img)
+    db.session.commit()
+    flash('Image deleted.', 'success')
+    return _token_redirect('admin.edit_problem', problem_id=problem_id)
+
+
+# ── Test Case Management ─────────────────────────────────────────────
 
 @admin_bp.route('/problem/<int:problem_id>/testcase', methods=['POST'])
 @require_instructor
@@ -105,6 +193,57 @@ def delete_test_case(problem_id, tc_id):
     return _token_redirect('admin.edit_problem', problem_id=problem_id)
 
 
+# ── Test Case Output Generator ───────────────────────────────────────
+
+@admin_bp.route('/problem/<int:problem_id>/generate-output', methods=['POST'])
+@require_instructor
+def generate_output(problem_id):
+    """Run the problem's solution code against given input, return output as JSON."""
+    problem = Problem.query.get_or_404(problem_id)
+
+    if not problem.solution_code:
+        return jsonify({'error': 'No solution code set for this problem.'}), 400
+
+    input_data = request.json.get('input_data', '') if request.is_json else ''
+    language = problem.solution_language
+
+    lang_config = current_app.config['SUPPORTED_LANGUAGES'].get(language)
+    if not lang_config:
+        return jsonify({'error': f'Unsupported language: {language}'}), 400
+
+    work_dir = tempfile.mkdtemp(prefix='gen_')
+    try:
+        # Compile
+        success, exe_path, err = compile_code(problem.solution_code, language, work_dir)
+        if not success:
+            return jsonify({'error': f'Compilation error:\n{err}'}), 400
+
+        # Run with the given input
+        result = run_test_case(
+            executable_path=exe_path,
+            language=language,
+            input_data=input_data,
+            expected_output='',       # we don't know expected yet
+            test_case_id=0,
+            time_limit_s=problem.time_limit_ms / 1000,
+            memory_limit_mb=problem.memory_limit_mb,
+            work_dir=work_dir,
+        )
+
+        if result.verdict == 'RE':
+            return jsonify({'error': f'Runtime error:\n{result.error}'}), 400
+        if result.verdict == 'TLE':
+            return jsonify({'error': 'Time limit exceeded.'}), 400
+
+        return jsonify({'output': result.actual_output})
+
+    finally:
+        import shutil
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+# ── Submissions & Delete ─────────────────────────────────────────────
+
 @admin_bp.route('/problem/<int:problem_id>/submissions')
 @require_instructor
 def view_submissions(problem_id):
@@ -113,7 +252,6 @@ def view_submissions(problem_id):
     submissions = Submission.query.filter_by(problem_id=problem_id)\
         .order_by(Submission.created_at.desc()).all()
 
-    # Parse results JSON for each submission
     for sub in submissions:
         try:
             sub.parsed_results = json.loads(sub.results_json) if sub.results_json else []
@@ -133,6 +271,12 @@ def delete_problem(problem_id):
     Submission.query.filter_by(problem_id=problem_id).delete()
     # Delete test cases (cascade should handle this, but be explicit)
     TestCase.query.filter_by(problem_id=problem_id).delete()
+    # Delete images from disk
+    import shutil
+    uploads = os.path.join(current_app.root_path, 'static', 'uploads', str(problem_id))
+    if os.path.exists(uploads):
+        shutil.rmtree(uploads, ignore_errors=True)
+    ProblemImage.query.filter_by(problem_id=problem_id).delete()
     db.session.delete(problem)
     db.session.commit()
     flash('Problem deleted.', 'success')

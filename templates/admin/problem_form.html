@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Edit' if problem else 'New' }} Problem{% endblock %}
+{% block head %}
+<!-- Ace Editor CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/theme-one_dark.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/mode-python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/mode-c_cpp.min.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="page-header">
@@ -20,7 +28,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="description">Problem Description <span class="hint">(Markdown supported)</span></label>
+                    <label for="description">Problem Description <span class="hint">(Markdown supported — use
+                            <code>![alt|50%](image:file.png)</code> for images)</span></label>
                     <textarea id="description" name="description" class="form-textarea" rows="12" placeholder="Write the problem statement here. You can use Markdown formatting.
 
 Example:
@@ -61,6 +70,12 @@ Given an array of integers, find two numbers that add up to a target.
                 </div>
                 {% endif %}
 
+                <!-- Solution Code (hidden textarea, synced by JS) -->
+                <input type="hidden" name="solution_code" id="solutionCodeInput"
+                    value="{{ problem.solution_code if problem else '' }}">
+                <input type="hidden" name="solution_language" id="solutionLangInput"
+                    value="{{ problem.solution_language if problem else 'c' }}">
+
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">
                         {{ 'Save Changes' if problem else 'Create Problem' }}
@@ -72,8 +87,74 @@ Given an array of integers, find two numbers that add up to a target.
             </form>
         </div>
 
-        <!-- Test Cases (only shown when editing) -->
         {% if problem %}
+        <!-- Solution Code Editor -->
+        <div class="card">
+            <h3>🧪 Solution Code <span class="hint">(used to generate test case outputs)</span></h3>
+            <div class="form-group">
+                <label for="solutionLangSelect">Language</label>
+                <select id="solutionLangSelect" class="form-select" style="max-width:200px;">
+                    {% for key, lang in languages.items() %}
+                    <option value="{{ key }}" {{ 'selected' if problem.solution_language==key }}>{{ lang.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="solutionEditor" class="code-editor"
+                style="height:250px; border:1px solid var(--border); border-radius:8px;">{{ problem.solution_code or ''
+                }}</div>
+            <p class="text-secondary" style="margin-top:0.5rem; font-size:0.8rem;">
+                Save the problem after editing the solution code, then use "Generate Output" below.
+            </p>
+        </div>
+
+        <!-- Problem Images -->
+        <div class="card">
+            <h3>📷 Problem Images</h3>
+
+            {% if images %}
+            <div class="test-cases-list" style="margin-bottom:1rem;">
+                {% for img in images %}
+                <div class="test-case-item" style="align-items:center;">
+                    <div class="tc-header" style="flex-wrap:wrap; gap:0.5rem;">
+                        <div style="display:flex; align-items:center; gap:0.75rem; flex:1; min-width:0;">
+                            <img src="{{ url_for('static', filename='uploads/' ~ problem.id ~ '/' ~ img.filename) }}"
+                                style="height:48px; width:48px; object-fit:cover; border-radius:6px; border:1px solid var(--border);">
+                            <code class="mono" style="font-size:0.8rem; word-break:break-all;">{{ img.filename }}</code>
+                        </div>
+                        <div style="display:flex; gap:0.4rem;">
+                            <button type="button" class="btn btn-sm btn-secondary copy-img-ref"
+                                data-ref="![image](image:{{ img.filename }})" title="Copy markdown reference">📋
+                                Copy</button>
+                            <form method="POST"
+                                action="{{ url_for('admin.delete_image', problem_id=problem.id, img_id=img.id) }}"
+                                style="display:inline;" onsubmit="return confirm('Delete this image?')">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-secondary">No images uploaded yet.</p>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('admin.upload_image', problem_id=problem.id) }}"
+                enctype="multipart/form-data" style="display:flex; gap:0.5rem; align-items:end; flex-wrap:wrap;">
+                <div class="form-group" style="flex:1; min-width:200px; margin:0;">
+                    <input type="file" name="image" accept="image/*" class="form-input" required>
+                </div>
+                <button type="submit" class="btn btn-secondary">📤 Upload Image</button>
+            </form>
+            <p class="text-secondary" style="margin-top:0.5rem; font-size:0.8rem;">
+                After uploading, copy the reference and paste it in the description.<br>
+                Syntax: <code>![alt text](image:filename.png)</code> or
+                <code>![alt text|50%](image:filename.png)</code> to resize.
+            </p>
+        </div>
+
+        <!-- Test Cases -->
         <div class="card">
             <h3>Test Cases <span class="count-badge">{{ test_cases|length }}</span></h3>
 
@@ -118,7 +199,8 @@ Given an array of integers, find two numbers that add up to a target.
             <hr class="divider">
 
             <h4>Add Test Case</h4>
-            <form method="POST" action="{{ url_for('admin.add_test_case', problem_id=problem.id) }}">
+            <form method="POST" action="{{ url_for('admin.add_test_case', problem_id=problem.id) }}"
+                id="addTestCaseForm">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="input_data">Input</label>
@@ -137,7 +219,15 @@ Given an array of integers, find two numbers that add up to a target.
                         <span>Sample test case (visible to students)</span>
                     </label>
                 </div>
-                <button type="submit" class="btn btn-secondary">+ Add Test Case</button>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button type="submit" class="btn btn-secondary">+ Add Test Case</button>
+                    <button type="button" class="btn btn-primary" id="generateOutputBtn" {% if not problem.solution_code
+                        %}disabled title="Save a solution code first" {% endif %}>
+                        🔄 Generate Output
+                    </button>
+                    <span id="generateStatus" class="text-secondary"
+                        style="align-self:center; font-size:0.85rem;"></span>
+                </div>
             </form>
         </div>
 
@@ -153,4 +243,94 @@ Given an array of integers, find two numbers that add up to a target.
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if problem %}
+<script>
+    // ── Solution Code Editor (Ace) ──────────────────────────────────
+    const solEditor = ace.edit("solutionEditor");
+    solEditor.setTheme("ace/theme/one_dark");
+    solEditor.setFontSize(13);
+    solEditor.setOptions({
+        fontFamily: "'JetBrains Mono', monospace",
+        showPrintMargin: false,
+        wrap: true,
+        tabSize: 4,
+        useSoftTabs: true,
+    });
+
+    const modeMap = {
+        'python': 'ace/mode/python',
+        'c': 'ace/mode/c_cpp',
+        'cpp': 'ace/mode/c_cpp',
+    };
+
+    const solLangSelect = document.getElementById('solutionLangSelect');
+    solEditor.session.setMode(modeMap[solLangSelect.value] || 'ace/mode/c_cpp');
+    solLangSelect.addEventListener('change', function () {
+        solEditor.session.setMode(modeMap[this.value] || 'ace/mode/c_cpp');
+    });
+
+    // Sync solution editor → hidden form fields before any form submit
+    document.querySelectorAll('form').forEach(function (f) {
+        f.addEventListener('submit', function () {
+            document.getElementById('solutionCodeInput').value = solEditor.getValue();
+            document.getElementById('solutionLangInput').value = solLangSelect.value;
+        });
+    });
+
+    // ── Generate Output Button ──────────────────────────────────────
+    document.getElementById('generateOutputBtn').addEventListener('click', function () {
+        const btn = this;
+        const status = document.getElementById('generateStatus');
+        const inputEl = document.getElementById('input_data');
+        const outputEl = document.getElementById('expected_output');
+
+        if (!inputEl.value.trim()) {
+            status.textContent = '⚠️ Enter input first.';
+            status.style.color = 'var(--yellow)';
+            return;
+        }
+
+        btn.disabled = true;
+        status.textContent = '⏳ Running solution...';
+        status.style.color = 'var(--text-secondary)';
+
+        fetch("{{ url_for('admin.generate_output', problem_id=problem.id) }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input_data: inputEl.value })
+        })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (ok && data.output !== undefined) {
+                    outputEl.value = data.output;
+                    status.textContent = '✅ Output generated!';
+                    status.style.color = 'var(--green)';
+                } else {
+                    status.textContent = '❌ ' + (data.error || 'Unknown error');
+                    status.style.color = 'var(--red)';
+                }
+            })
+            .catch(err => {
+                status.textContent = '❌ Network error';
+                status.style.color = 'var(--red)';
+            })
+            .finally(() => { btn.disabled = false; });
+    });
+
+    // ── Copy image reference buttons ────────────────────────────────
+    document.querySelectorAll('.copy-img-ref').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const ref = this.getAttribute('data-ref');
+            navigator.clipboard.writeText(ref).then(() => {
+                const orig = this.textContent;
+                this.textContent = '✓ Copied!';
+                setTimeout(() => this.textContent = orig, 1500);
+            });
+        });
+    });
+</script>
+{% endif %}
 {% endblock %}

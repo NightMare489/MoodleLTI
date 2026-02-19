@@ -21,7 +21,7 @@
                         <span class="limit-badge">💾 {{ problem.memory_limit_mb }}MB</span>
                     </div>
                 </div>
-                <div class="problem-body markdown-body">
+                <div class="problem-body markdown-body" data-problem-id="{{ problem.id }}">
                     {{ problem.description | replace('\n', '<br>') | safe }}
                 </div>
 
@@ -160,5 +160,24 @@
             setTimeout(() => btn.textContent = '📋', 1500);
         });
     }
+
+    // ── Render image:filename references ────────────────────────────
+    (function () {
+        const body = document.querySelector('.problem-body');
+        if (!body) return;
+        const pid = body.getAttribute('data-problem-id');
+        // Match:  ![alt](image:file.png)  or  ![alt|50%](image:file.png)
+        body.innerHTML = body.innerHTML.replace(
+            /!\[([^\]]*?)(?:\|(\d+%?))?\]\(image:([^)]+)\)/g,
+            function (match, alt, size, filename) {
+                const src = `/static/uploads/${pid}/${filename}`;
+                let style = 'max-width:100%; border-radius:8px; margin:0.5rem 0;';
+                if (size) {
+                    style += ` width:${size.endsWith('%') ? size : size + 'px'};`;
+                }
+                return `<img src="${src}" alt="${alt}" style="${style}">`;
+            }
+        );
+    })();
 </script>
 {% endblock %}

@@ -3,8 +3,26 @@
 {% block content %}
 <div class="container">
     <div class="page-header">
-        <h1>🏆 Problems</h1>
+        <div>
+            <h1>🏆 Problems</h1>
+            {% if is_sheet %}
+            <p class="subtitle">Problem Sheet — {{ solved_count }} / {{ total_count }} solved</p>
+            {% endif %}
+        </div>
     </div>
+
+    {% if is_sheet %}
+    <div class="card" style="padding:0.8rem 1.2rem; margin-bottom:1.2rem;">
+        <div style="display:flex; align-items:center; gap:1rem; font-size:0.9rem;">
+            <span style="white-space:nowrap; font-weight:600;">Score: {{ solved_count }} / {{ total_count }}</span>
+            <div style="flex:1; height:8px; background:var(--bg-hover); border-radius:4px; overflow:hidden;">
+                <div
+                    style="height:100%; width:{{ (solved_count / total_count * 100) if total_count > 0 else 0 }}%; background:var(--green); border-radius:4px; transition:width 0.3s;">
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {% if problems %}
     <div class="problem-grid">

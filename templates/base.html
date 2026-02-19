@@ -12,23 +12,33 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <!-- KaTeX for LaTeX math rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <!-- Apply saved theme before paint to avoid flash -->
+    <script>
+        (function () {
+            var t = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
     {% block head %}{% endblock %}
 </head>
 
 <body>
-    {% set locked = session.get('locked_problem_id') and session.get('role') != 'instructor' %}
-    <nav class="navbar" {% if locked %} style="justify-content:center" {% endif %}>
+    {# locked_single = single-problem lock (hide nav). sheet = multi-problem (show nav). #}
+    {% set pid_list = session.get('locked_problem_ids') %}
+    {% set locked_single = pid_list|length == 1 if pid_list else false %}
+    {% set is_instructor = session.get('role') == 'instructor' %}
+    <nav class="navbar" {% if locked_single and not is_instructor %} style="justify-content:center" {% endif %}>
         <div class="nav-container">
-            {% if not locked %}
-            <a href="{% if session.get('role') == 'instructor' %}{{ url_for('admin.dashboard') }}{% else %}{{ url_for('student.problem_list') }}{% endif %}"
+            {% if not (locked_single and not is_instructor) %}
+            <a href="{% if is_instructor %}{{ url_for('admin.dashboard') }}{% else %}{{ url_for('student.problem_list') }}{% endif %}"
                 class="nav-brand">
                 <span class="brand-icon">⚡</span>
                 <span class="brand-text">CodeJudge</span>
             </a>
             {% endif %}
             <div class="nav-links">
-                {% if not locked %}
-                {% if session.get('role') == 'instructor' %}
+                {% if not (locked_single and not is_instructor) %}
+                {% if is_instructor %}
                 <a href="{{ url_for('admin.dashboard') }}" class="nav-link">Dashboard</a>
                 <a href="{{ url_for('admin.new_problem') }}" class="nav-link">+ New Problem</a>
                 {% else %}
@@ -43,6 +53,7 @@
                     <span class="role-badge role-{{ session.role }}">{{ session.role }}</span>
                 </span>
                 {% endif %}
+                <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌙</button>
             </div>
         </div>
     </nav>
@@ -85,6 +96,25 @@
             ],
             throwOnError: false
         });"></script>
+
+    <!-- Theme toggle -->
+    <script>
+        (function () {
+            var btn = document.getElementById('themeToggle');
+            function updateIcon() {
+                var current = document.documentElement.getAttribute('data-theme');
+                btn.textContent = current === 'dark' ? '☀️' : '🌙';
+            }
+            updateIcon();
+            btn.addEventListener('click', function () {
+                var current = document.documentElement.getAttribute('data-theme');
+                var next = current === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', next);
+                localStorage.setItem('theme', next);
+                updateIcon();
+            });
+        })();
+    </script>
 </body>
 
 </html>

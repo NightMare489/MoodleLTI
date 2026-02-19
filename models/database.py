@@ -34,14 +34,32 @@ class Problem(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_active = db.Column(db.Boolean, default=True)
+    solution_code = db.Column(db.Text, default='')       # correct solution for generator
+    solution_language = db.Column(db.String(20), default='c')
 
     test_cases = db.relationship('TestCase', backref='problem', lazy='dynamic',
                                  cascade='all, delete-orphan')
+    images = db.relationship('ProblemImage', backref='problem', lazy='dynamic',
+                             cascade='all, delete-orphan')
     submissions = db.relationship('Submission', backref='problem', lazy='dynamic')
     creator = db.relationship('User', backref='created_problems')
 
     def __repr__(self):
         return f'<Problem {self.title}>'
+
+
+
+class ProblemImage(db.Model):
+    """An image asset attached to a problem."""
+    __tablename__ = 'problem_images'
+
+    id = db.Column(db.Integer, primary_key=True)
+    problem_id = db.Column(db.Integer, db.ForeignKey('problems.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f'<ProblemImage {self.filename} for Problem {self.problem_id}>'
 
 
 class TestCase(db.Model):

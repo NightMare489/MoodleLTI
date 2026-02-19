@@ -100,8 +100,16 @@ def launch():
     db.session.add(lti_session)
     db.session.commit()
 
-    # If a specific problem was requested, lock the student to it
-    locked_problem = params.get('custom_problem_id') or None
+    # If a specific problem (or set of problems) was requested via
+    # custom_problem_id, parse it.  Accepts a single id ("5") or a
+    # comma-separated list ("1,2,3,4,5").
+    raw_problem_ids = params.get('custom_problem_id') or None
+    locked_problem_ids = None
+    if raw_problem_ids:
+        try:
+            locked_problem_ids = [int(x.strip()) for x in raw_problem_ids.split(',') if x.strip()]
+        except ValueError:
+            locked_problem_ids = None
 
     # Session data
     sess_data = {
@@ -109,7 +117,7 @@ def launch():
         'user_name': user.name,
         'role': user.role,
         'lti_session_id': lti_session.id,
-        'locked_problem_id': int(locked_problem) if locked_problem else None,
+        'locked_problem_ids': locked_problem_ids,
     }
 
     # Try to set the Flask cookie session (works when cookies aren't blocked)
@@ -117,7 +125,7 @@ def launch():
     session['user_name'] = sess_data['user_name']
     session['role'] = sess_data['role']
     session['lti_session_id'] = sess_data['lti_session_id']
-    session['locked_problem_id'] = sess_data['locked_problem_id']
+    session['locked_problem_ids'] = sess_data['locked_problem_ids']
     session.modified = True
 
     # Also create a signed URL token as a fallback for when
@@ -128,9 +136,11 @@ def launch():
     if user.role == 'instructor':
         target = url_for('admin.dashboard', _lt=token)
     else:
-        if locked_problem:
-            target = url_for('student.view_problem', problem_id=locked_problem, _lt=token)
+        if locked_problem_ids and len(locked_problem_ids) == 1:
+            # Single problem — direct open (existing behaviour)
+            target = url_for('student.view_problem', problem_id=locked_problem_ids[0], _lt=token)
         else:
+            # Multiple problems (sheet) or no lock — show list
             target = url_for('student.problem_list', _lt=token)
 
     return _client_side_redirect(target)
