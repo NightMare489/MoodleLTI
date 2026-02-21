@@ -78,6 +78,8 @@
                         Test {{ loop.index }}
                         {% if r.test_case_id in sample_ids %}
                         <span class="sample-badge">Sample</span>
+                        {% elif session.get('role') == 'instructor' %}
+                        <span class="sample-badge" style="background:rgba(239,68,68,0.15);color:#ef4444;">Hidden</span>
                         {% endif %}
                     </span>
                     <span class="verdict verdict-{{ r.verdict }}">{{ r.verdict }}</span>
@@ -86,7 +88,7 @@
                     {% endif %}
                 </div>
 
-                {% if r.test_case_id in sample_ids %}
+                {% if r.test_case_id in sample_ids or session.get('role') == 'instructor' %}
                 <div class="tr-details">
                     {% if r.verdict == 'WA' %}
                     <div class="tr-diff">
