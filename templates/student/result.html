@@ -90,15 +90,16 @@
 
                 {% if r.test_case_id in sample_ids or session.get('role') == 'instructor' %}
                 <div class="tr-details">
-                    {% if r.verdict == 'WA' %}
+                    {% if r.verdict == 'WA' or session.get('role') == 'instructor' %}
                     <div class="tr-diff">
                         <div>
                             <span class="tr-diff-label">Expected:</span>
                             <pre class="io-block">{{ r.expected_output }}</pre>
                         </div>
                         <div>
-                            <span class="tr-diff-label">Got:</span>
-                            <pre class="io-block io-wrong">{{ r.actual_output }}</pre>
+                            <span class="tr-diff-label">{{ 'Got:' }}</span>
+                            <pre
+                                class="io-block {{ 'io-wrong' if r.verdict != 'AC' else '' }}">{{ r.actual_output }}</pre>
                         </div>
                     </div>
                     {% endif %}
