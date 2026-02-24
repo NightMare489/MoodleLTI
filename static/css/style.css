@@ -869,6 +869,7 @@ a:hover {
     background: var(--bg-primary);
 }
 
+/* --- Output Diff --- */
 .tr-diff {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -882,6 +883,87 @@ a:hover {
     text-transform: uppercase;
     margin-bottom: 0.3rem;
     display: block;
+}
+
+/* --- Diff Toggle --- */
+.tr-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.tr-header-row h3 {
+    margin: 0;
+}
+
+.diff-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.diff-toggle input {
+    display: none;
+}
+
+.diff-toggle-slider {
+    width: 36px;
+    height: 20px;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    position: relative;
+    transition: background 0.2s;
+}
+
+.diff-toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+
+.diff-toggle input:checked+.diff-toggle-slider {
+    background: var(--green);
+}
+
+.diff-toggle input:checked+.diff-toggle-slider::after {
+    transform: translateX(16px);
+}
+
+.diff-toggle-text {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* Wrong / extra word — red highlight */
+.diff-wrong {
+    background: var(--red);
+    color: #fff;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+/* Missing word — solid green background + strikethrough */
+.diff-missing {
+    background: var(--green);
+    color: #fff;
+    text-decoration: line-through;
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+[data-theme="light"] .diff-wrong {
+    background: rgba(209, 36, 47, 0.25);
+    color: var(--red);
 }
 
 /* --- Verdict Result Card --- */

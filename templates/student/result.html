@@ -69,7 +69,14 @@
     <!-- Test Case Results -->
     {% if results %}
     <div class="card">
-        <h3>Test Results</h3>
+        <div class="tr-header-row">
+            <h3>Test Results</h3>
+            <label class="diff-toggle">
+                <input type="checkbox" id="diff-toggle-cb" checked>
+                <span class="diff-toggle-slider"></span>
+                <span class="diff-toggle-text">Diff Checker</span>
+            </label>
+        </div>
         <div class="test-results">
             {% for r in results %}
             <div class="test-result test-result-{{ r.verdict }}">
@@ -97,9 +104,11 @@
                             <pre class="io-block">{{ r.expected_output }}</pre>
                         </div>
                         <div>
-                            <span class="tr-diff-label">{{ 'Got:' }}</span>
-                            <pre
-                                class="io-block {{ 'io-wrong' if r.verdict != 'AC' else '' }}">{{ r.actual_output }}</pre>
+                            <span class="tr-diff-label">Got:</span>
+                            <pre class="io-block {{ 'io-wrong' if r.verdict != 'AC' else '' }}"
+                                id="got-{{ loop.index }}"></pre>
+                            <script type="application/json" class="diff-data" data-target="got-{{ loop.index }}"
+                                data-verdict="{{ r.verdict }}">{{ {"expected": r.expected_output, "actual": r.actual_output} | tojson }}</script>
                         </div>
                     </div>
                     {% endif %}
@@ -120,4 +129,63 @@
         <pre class="code-display"><code>{{ submission.code }}</code></pre>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/diff@5.2.0/dist/diff.min.js"></script>
+<script>
+    (function () {
+        function esc(s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function renderDiffs(enabled) {
+            document.querySelectorAll('script.diff-data').forEach(function (script) {
+                var data = JSON.parse(script.textContent);
+                var verdict = script.getAttribute('data-verdict');
+                var pre = document.getElementById(script.getAttribute('data-target'));
+                if (!pre) return;
+
+                var expected = data.expected || '';
+                var actual = data.actual || '';
+
+                // If diff disabled or outputs match, show plain text
+                if (!enabled || verdict === 'AC' || expected === actual) {
+                    pre.textContent = actual;
+                    return;
+                }
+
+                // Word-by-word diff
+                var diff = Diff.diffWords(expected, actual);
+                var html = '';
+
+                diff.forEach(function (part) {
+                    var safe = esc(part.value);
+                    if (part.removed) {
+                        html += '<span class="diff-missing">' + safe + '</span>';
+                    } else if (part.added) {
+                        html += '<span class="diff-wrong">' + safe + '</span>';
+                    } else {
+                        html += '<span class="diff-ok">' + safe + '</span>';
+                    }
+                });
+
+                pre.innerHTML = html;
+            });
+        }
+
+        var cb = document.getElementById('diff-toggle-cb');
+        if (cb) {
+            var saved = localStorage.getItem('diffCheckerEnabled');
+            cb.checked = saved === null ? true : saved === '1';
+
+            cb.addEventListener('change', function () {
+                localStorage.setItem('diffCheckerEnabled', cb.checked ? '1' : '0');
+                renderDiffs(cb.checked);
+            });
+
+            renderDiffs(cb.checked);
+        }
+    })();
+</script>
 {% endblock %}
