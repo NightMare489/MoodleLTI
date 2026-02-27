@@ -242,6 +242,85 @@ def generate_output(problem_id):
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+# ── Batch Test Case Generator ────────────────────────────────────────
+
+@admin_bp.route('/problem/<int:problem_id>/generate-batch', methods=['POST'])
+@require_instructor
+def generate_batch(problem_id):
+    """Split bulk input on blank lines, run each, and save as test cases."""
+    import shutil
+
+    problem = Problem.query.get_or_404(problem_id)
+
+    if not problem.solution_code:
+        return jsonify({'error': 'No solution code set for this problem.'}), 400
+
+    bulk_input = request.json.get('inputs_bulk', '') if request.is_json else ''
+    is_sample = request.json.get('is_sample', False) if request.is_json else False
+    language = problem.solution_language
+
+    lang_config = current_app.config['SUPPORTED_LANGUAGES'].get(language)
+    if not lang_config:
+        return jsonify({'error': f'Unsupported language: {language}'}), 400
+
+    # Split on double-newline (blank line) to get individual test case inputs.
+    # Normalize line endings first.
+    bulk_input = bulk_input.replace('\r\n', '\n')
+    raw_parts = bulk_input.split('\n\n')
+    inputs = [p.strip() for p in raw_parts if p.strip()]
+
+    if not inputs:
+        return jsonify({'error': 'No test case inputs provided.'}), 400
+
+    work_dir = tempfile.mkdtemp(prefix='gen_batch_')
+    try:
+        # Compile once
+        success, exe_path, err = compile_code(problem.solution_code, language, work_dir)
+        if not success:
+            return jsonify({'error': f'Compilation error:\n{err}'}), 400
+
+        added = 0
+        errors = []
+        current_order = TestCase.query.filter_by(problem_id=problem.id).count()
+
+        for idx, inp in enumerate(inputs):
+            result = run_test_case(
+                executable_path=exe_path,
+                language=language,
+                input_data=inp,
+                expected_output='',
+                test_case_id=idx,
+                time_limit_s=problem.time_limit_ms / 1000,
+                memory_limit_mb=problem.memory_limit_mb,
+                work_dir=work_dir,
+            )
+
+            if result.verdict in ('RE', 'TLE'):
+                err_msg = result.error if result.verdict == 'RE' else 'Time limit exceeded'
+                errors.append(f'Test case #{idx + 1}: {err_msg}')
+                continue
+
+            tc = TestCase(
+                problem_id=problem.id,
+                input_data=inp,
+                expected_output=result.actual_output,
+                is_sample=is_sample,
+                order=current_order + added,
+            )
+            db.session.add(tc)
+            added += 1
+
+        db.session.commit()
+
+        resp = {'added': added, 'total': len(inputs)}
+        if errors:
+            resp['errors'] = errors
+        return jsonify(resp)
+
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 # ── Submissions & Delete ─────────────────────────────────────────────
 
 @admin_bp.route('/problem/<int:problem_id>/submissions')

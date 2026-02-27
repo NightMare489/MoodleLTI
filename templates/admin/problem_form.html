@@ -229,6 +229,39 @@ Given an array of integers, find two numbers that add up to a target.
                         style="align-self:center; font-size:0.85rem;"></span>
                 </div>
             </form>
+
+            <hr class="divider">
+
+            <h4>⚡ Batch Generate Test Cases</h4>
+            <p class="text-secondary" style="font-size:0.85rem; margin-bottom:0.75rem;">
+                Paste multiple inputs separated by <strong>blank lines</strong>. Each block is treated as a separate
+                test case. The solution code runs for each one and the output is auto-generated.
+            </p>
+            <div class="form-group">
+                <label for="batch_inputs">Inputs (separated by blank lines)</label>
+                <textarea id="batch_inputs" class="form-textarea mono" rows="8" placeholder="1
+
+2
+
+3
+
+4
+
+5"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="batch_is_sample">
+                    <span>Mark as sample test cases (visible to students)</span>
+                </label>
+            </div>
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                <button type="button" class="btn btn-primary" id="batchGenerateBtn" {% if not problem.solution_code
+                    %}disabled title="Save a solution code first" {% endif %}>
+                    ⚡ Batch Generate
+                </button>
+                <span id="batchStatus" class="text-secondary" style="font-size:0.85rem;"></span>
+            </div>
         </div>
 
         <!-- Danger Zone -->
@@ -318,6 +351,52 @@ Given an array of integers, find two numbers that add up to a target.
                 status.style.color = 'var(--red)';
             })
             .finally(() => { btn.disabled = false; });
+    });
+
+    // ── Batch Generate Button ────────────────────────────────────────
+    document.getElementById('batchGenerateBtn').addEventListener('click', function () {
+        const btn = this;
+        const status = document.getElementById('batchStatus');
+        const inputEl = document.getElementById('batch_inputs');
+        const isSample = document.getElementById('batch_is_sample').checked;
+
+        if (!inputEl.value.trim()) {
+            status.textContent = '⚠️ Enter at least one input.';
+            status.style.color = 'var(--yellow)';
+            return;
+        }
+
+        btn.disabled = true;
+        status.textContent = '⏳ Running solution for all inputs...';
+        status.style.color = 'var(--text-secondary)';
+
+        fetch("{{ url_for('admin.generate_batch', problem_id=problem.id) }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inputs_bulk: inputEl.value, is_sample: isSample })
+        })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (ok && data.added !== undefined) {
+                    let msg = `✅ ${data.added} of ${data.total} test case(s) added!`;
+                    if (data.errors && data.errors.length) {
+                        msg += ` (${data.errors.length} failed)`;
+                    }
+                    status.textContent = msg;
+                    status.style.color = 'var(--green)';
+                    // Reload after a short delay so the user sees the message
+                    setTimeout(() => location.reload(), 1200);
+                } else {
+                    status.textContent = '❌ ' + (data.error || 'Unknown error');
+                    status.style.color = 'var(--red)';
+                    btn.disabled = false;
+                }
+            })
+            .catch(err => {
+                status.textContent = '❌ Network error';
+                status.style.color = 'var(--red)';
+                btn.disabled = false;
+            });
     });
 
     // ── Copy image reference buttons ────────────────────────────────
