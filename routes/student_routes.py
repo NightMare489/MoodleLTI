@@ -89,8 +89,8 @@ def view_problem(problem_id):
 
     problem = Problem.query.get_or_404(problem_id)
     if not problem.is_active:
-        flash('This problem is not currently available.', 'error')
-        return _token_redirect('student.problem_list')
+        return render_template('student/problem_closed.html',
+                               problem=problem), 403
 
     sample_cases = TestCase.query.filter_by(
         problem_id=problem_id, is_sample=True
@@ -117,8 +117,8 @@ def submit_code(problem_id):
     """Submit code for judging."""
     problem = Problem.query.get_or_404(problem_id)
     if not problem.is_active:
-        flash('This problem is not currently available.', 'error')
-        return _token_redirect('student.problem_list')
+        return render_template('student/problem_closed.html',
+                               problem=problem), 403
 
     code = request.form.get('code', '').strip()
     language = request.form.get('language', 'python')

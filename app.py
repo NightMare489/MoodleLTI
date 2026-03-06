@@ -124,6 +124,24 @@ def create_app(config_class=Config):
         from models.database import User, Problem, TestCase, Submission, LTISession  # noqa: F401
         db.create_all()
 
+    # ------------------------------------------------------------------
+    # Jinja2 custom filters
+    # ------------------------------------------------------------------
+    import markdown2
+    from markupsafe import Markup
+
+    @app.template_filter('markdown')
+    def markdown_filter(text):
+        """Convert Markdown text to HTML."""
+        if not text:
+            return ''
+        html = markdown2.markdown(
+            text,
+            extras=['fenced-code-blocks', 'tables', 'break-on-newline',
+                    'header-ids', 'strike', 'task_list'],
+        )
+        return Markup(html)
+
     return app
 
 

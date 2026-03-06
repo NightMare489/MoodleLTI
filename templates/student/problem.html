@@ -22,7 +22,7 @@
                     </div>
                 </div>
                 <div class="problem-body markdown-body" data-problem-id="{{ problem.id }}">
-                    {{ problem.description | replace('\n', '<br>') | safe }}
+                    {{ problem.description | markdown }}
                 </div>
 
                 {% if sample_cases %}
