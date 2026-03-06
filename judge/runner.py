@@ -20,8 +20,9 @@ class JudgeResult:
                  time_ms=0, error=''):
         self.test_case_id = test_case_id
         self.verdict = verdict  # AC, WA, TLE, RE, CE
-        self.actual_output = actual_output[:500]  # Truncate for storage
-        self.expected_output = expected_output[:500]
+        self.actual_output_full = actual_output       # Full output (for generator)
+        self.actual_output = actual_output[:2000]      # Truncated for display
+        self.expected_output = expected_output[:2000]
         self.time_ms = time_ms
         self.error = error[:500]
 

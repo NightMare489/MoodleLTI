@@ -235,7 +235,7 @@ def generate_output(problem_id):
         if result.verdict == 'TLE':
             return jsonify({'error': 'Time limit exceeded.'}), 400
 
-        return jsonify({'output': result.actual_output})
+        return jsonify({'output': result.actual_output_full})
 
     finally:
         import shutil
@@ -303,7 +303,7 @@ def generate_batch(problem_id):
             tc = TestCase(
                 problem_id=problem.id,
                 input_data=inp,
-                expected_output=result.actual_output,
+                expected_output=result.actual_output_full,
                 is_sample=is_sample,
                 order=current_order + added,
             )
