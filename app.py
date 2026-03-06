@@ -135,6 +135,8 @@ def create_app(config_class=Config):
         """Convert Markdown text to HTML."""
         if not text:
             return ''
+        # Normalize Windows line endings so break-on-newline works
+        text = text.replace('\r\n', '\n')
         html = markdown2.markdown(
             text,
             extras=['fenced-code-blocks', 'tables', 'break-on-newline',
