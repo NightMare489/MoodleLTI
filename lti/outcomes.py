@@ -107,9 +107,7 @@ def send_grade(outcome_url, sourcedid, score):
     if not outcome_url or not sourcedid:
         return False, 'No outcome URL or sourcedid available (grade passback not configured)'
 
-    print("Outcome URL:", outcome_url)
-    print("Sourced ID:", sourcedid)
-    print("Score:", score)
+    current_app.logger.debug(f'Grade passback: url={outcome_url}, score={score}')
 
     consumer_key = current_app.config['LTI_KEY']
     consumer_secret = current_app.config['LTI_SECRET']
@@ -150,7 +148,7 @@ def send_grade(outcome_url, sourcedid, score):
                 'xml_body': xml_body,
                 'auth_header': auth_header,
             }
-            print(f"[proxy] Sending grade to proxy: {proxy_url}")
+            current_app.logger.debug(f'Sending grade to proxy: {proxy_url}')
             response = requests.post(
                 proxy_url,
                 json=payload,
@@ -170,10 +168,10 @@ def send_grade(outcome_url, sourcedid, score):
             )
 
         if response.status_code == 200 and 'success' in response.text.lower():
-            print("Grade sent successfully", score)
+            current_app.logger.debug(f'Grade sent successfully: {score}')
             return True, 'Grade sent successfully'
         else:
-            print(f"Moodle returned: {response.status_code} - {response.text[:500]}")
+            current_app.logger.warning(f'Moodle returned: {response.status_code} - {response.text[:500]}')
             return False, f'Moodle returned: {response.status_code} - {response.text[:200]}'
 
     except requests.RequestException as e:

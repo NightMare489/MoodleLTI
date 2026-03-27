@@ -5,8 +5,11 @@ Problem viewing, code submission, and submission history.
 """
 
 import json
+import threading
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash, session, current_app)
+from sqlalchemy import func, case
+from sqlalchemy.orm import joinedload
 from models.database import db, Problem, TestCase, Submission, LTISession
 from lti.auth import require_lti_session
 from lti.outcomes import send_grade
@@ -56,16 +59,37 @@ def problem_list():
         problems = Problem.query.filter_by(is_active=True)\
             .order_by(Problem.created_at.desc()).all()
 
-    # Get best submission for each problem for the current user
+    # Get best submission for each problem in a SINGLE query (avoids N+1)
     user_id = session['user_id']
+    problem_ids = [p.id for p in problems]
+
+    if problem_ids:
+        best_subs = db.session.query(
+            Submission.problem_id,
+            func.max(Submission.score).label('best_score'),
+            func.max(case((Submission.verdict == 'AC', 1), else_=0)).label('has_ac')
+        ).filter(
+            Submission.user_id == user_id,
+            Submission.problem_id.in_(problem_ids)
+        ).group_by(Submission.problem_id).all()
+
+        best_map = {row.problem_id: row for row in best_subs}
+    else:
+        best_map = {}
+
     solved_count = 0
     for problem in problems:
-        best = Submission.query.filter_by(
-            user_id=user_id, problem_id=problem.id
-        ).order_by(Submission.score.desc()).first()
-        problem.user_best = best
-        if best and best.verdict == 'AC':
-            solved_count += 1
+        row = best_map.get(problem.id)
+        if row:
+            # Create a lightweight object for the template
+            problem.user_best = type('Best', (), {
+                'verdict': 'AC' if row.has_ac else 'WA',
+                'score': row.best_score
+            })()
+            if row.has_ac:
+                solved_count += 1
+        else:
+            problem.user_best = None
 
     return render_template('student/problem_list.html',
                            problems=problems,
@@ -162,25 +186,19 @@ def submit_code(problem_id):
     db.session.add(submission)
     db.session.commit()
 
-    # ---- Grade passback to Moodle ----
+    # ---- Grade passback to Moodle (non-blocking) ----
     locked_ids, is_single = _get_lock_info()
     lti_session_id = session.get('lti_session_id')
     if lti_session_id:
         lti_sess = LTISession.query.get(lti_session_id)
         if lti_sess and lti_sess.outcome_service_url:
             if locked_ids and len(locked_ids) > 1:
-                # Multi-problem sheet:
-                # grade = solved_count / total_problems
-                # Each AC problem = 1 point. Moodle total = len(locked_ids).
-                solved = 0
-                for pid in locked_ids:
-                    has_ac = Submission.query.filter_by(
-                        user_id=session['user_id'],
-                        problem_id=pid,
-                        verdict='AC'
-                    ).first()
-                    if has_ac:
-                        solved += 1
+                # Multi-problem sheet: single query instead of loop
+                solved = Submission.query.filter(
+                    Submission.user_id == session['user_id'],
+                    Submission.problem_id.in_(locked_ids),
+                    Submission.verdict == 'AC'
+                ).with_entities(Submission.problem_id).distinct().count()
                 grade = solved / len(locked_ids)
             else:
                 # Single problem or no lock: binary 1/0
@@ -191,13 +209,22 @@ def submit_code(problem_id):
                 ).first() is not None
                 grade = 1.0 if has_ac else 0.0
 
-            success, msg = send_grade(
-                lti_sess.outcome_service_url,
-                lti_sess.result_sourcedid,
-                grade
-            )
-            if not success:
-                current_app.logger.warning(f'Grade passback failed: {msg}')
+            # Fire grade passback in a background thread to avoid blocking
+            outcome_url = lti_sess.outcome_service_url
+            result_sourcedid = lti_sess.result_sourcedid
+            app = current_app._get_current_object()
+
+            def _send_grade_bg(app, outcome_url, result_sourcedid, grade):
+                with app.app_context():
+                    success, msg = send_grade(outcome_url, result_sourcedid, grade)
+                    if not success:
+                        app.logger.warning(f'Grade passback failed: {msg}')
+
+            threading.Thread(
+                target=_send_grade_bg,
+                args=(app, outcome_url, result_sourcedid, grade),
+                daemon=True
+            ).start()
 
     return _token_redirect('student.view_result', submission_id=submission.id)
 
@@ -259,9 +286,12 @@ def my_submissions():
         submissions = Submission.query.filter(
             Submission.user_id == user_id,
             Submission.problem_id.in_(locked_ids)
-        ).order_by(Submission.created_at.desc()).all()
+        ).options(
+            joinedload(Submission.problem)
+        ).order_by(Submission.created_at.desc()).limit(50).all()
     else:
         submissions = Submission.query.filter_by(user_id=user_id)\
-            .order_by(Submission.created_at.desc()).all()
+            .options(joinedload(Submission.problem))\
+            .order_by(Submission.created_at.desc()).limit(50).all()
 
     return render_template('student/submissions.html', submissions=submissions)

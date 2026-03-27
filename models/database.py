@@ -54,7 +54,7 @@ class ProblemImage(db.Model):
     __tablename__ = 'problem_images'
 
     id = db.Column(db.Integer, primary_key=True)
-    problem_id = db.Column(db.Integer, db.ForeignKey('problems.id'), nullable=False)
+    problem_id = db.Column(db.Integer, db.ForeignKey('problems.id'), nullable=False, index=True)
     filename = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -67,7 +67,7 @@ class TestCase(db.Model):
     __tablename__ = 'test_cases'
 
     id = db.Column(db.Integer, primary_key=True)
-    problem_id = db.Column(db.Integer, db.ForeignKey('problems.id'), nullable=False)
+    problem_id = db.Column(db.Integer, db.ForeignKey('problems.id'), nullable=False, index=True)
     input_data = db.Column(db.Text, nullable=False)
     expected_output = db.Column(db.Text, nullable=False)
     is_sample = db.Column(db.Boolean, default=False)  # Visible to students
@@ -82,11 +82,15 @@ class Submission(db.Model):
     __tablename__ = 'submissions'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    problem_id = db.Column(db.Integer, db.ForeignKey('problems.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    problem_id = db.Column(db.Integer, db.ForeignKey('problems.id'), nullable=False, index=True)
     code = db.Column(db.Text, nullable=False)
     language = db.Column(db.String(20), nullable=False)  # 'python', 'c', 'cpp'
-    verdict = db.Column(db.String(20), default='PENDING')  # AC, WA, TLE, RE, CE, PENDING
+    verdict = db.Column(db.String(20), default='PENDING', index=True)  # AC, WA, TLE, RE, CE, PENDING
+
+    __table_args__ = (
+        db.Index('ix_submission_user_problem', 'user_id', 'problem_id'),
+    )
     score = db.Column(db.Float, default=0.0)  # 0.0 to 1.0
     results_json = db.Column(db.Text, default='[]')  # Per-test-case results as JSON
     error_message = db.Column(db.Text, default='')
@@ -101,7 +105,7 @@ class LTISession(db.Model):
     __tablename__ = 'lti_sessions'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     problem_id = db.Column(db.Integer, db.ForeignKey('problems.id'), nullable=True)
     context_id = db.Column(db.String(255), default='')  # Moodle course ID
     resource_link_id = db.Column(db.String(255), default='')  # Moodle activity ID
