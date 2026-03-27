@@ -346,7 +346,7 @@ def view_submissions(problem_id):
     problem = Problem.query.get_or_404(problem_id)
     submissions = Submission.query.filter_by(problem_id=problem_id)\
         .options(joinedload(Submission.user))\
-        .order_by(Submission.created_at.desc()).limit(200).all()
+        .order_by(Submission.created_at.desc()).all()
 
     for sub in submissions:
         try:
