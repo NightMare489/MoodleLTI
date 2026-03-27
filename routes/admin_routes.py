@@ -12,6 +12,8 @@ import tempfile
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash, session, current_app, jsonify)
 from werkzeug.utils import secure_filename
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from models.database import db, Problem, TestCase, Submission, User, ProblemImage
 from lti.auth import require_instructor
 from judge.runner import compile_code, run_test_case
@@ -47,6 +49,20 @@ def _uploads_dir(problem_id):
 def dashboard():
     """List all problems."""
     problems = Problem.query.order_by(Problem.created_at.desc()).all()
+
+    # Pre-compute counts with 2 aggregate queries (instead of 2N lazy .count() calls)
+    tc_counts = dict(db.session.query(
+        TestCase.problem_id, func.count(TestCase.id)
+    ).group_by(TestCase.problem_id).all())
+
+    sub_counts = dict(db.session.query(
+        Submission.problem_id, func.count(Submission.id)
+    ).group_by(Submission.problem_id).all())
+
+    for p in problems:
+        p.tc_count = tc_counts.get(p.id, 0)
+        p.sub_count = sub_counts.get(p.id, 0)
+
     return render_template('admin/dashboard.html', problems=problems)
 
 
@@ -329,7 +345,8 @@ def view_submissions(problem_id):
     """View all submissions for a problem."""
     problem = Problem.query.get_or_404(problem_id)
     submissions = Submission.query.filter_by(problem_id=problem_id)\
-        .order_by(Submission.created_at.desc()).all()
+        .options(joinedload(Submission.user))\
+        .order_by(Submission.created_at.desc()).limit(200).all()
 
     for sub in submissions:
         try:

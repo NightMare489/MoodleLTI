@@ -32,8 +32,8 @@
                     <td><strong>{{ p.title }}</strong></td>
                     <td class="mono">{{ p.time_limit_ms }}ms</td>
                     <td class="mono">{{ p.memory_limit_mb }}MB</td>
-                    <td class="mono">{{ p.test_cases.count() }}</td>
-                    <td class="mono">{{ p.submissions.count() }}</td>
+                    <td class="mono">{{ p.tc_count }}</td>
+                    <td class="mono">{{ p.sub_count }}</td>
                     <td>
                         {% if p.is_active %}
                         <span class="status-badge status-active">Active</span>

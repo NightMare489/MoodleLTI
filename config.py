@@ -19,6 +19,10 @@ class Config:
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 280,
+    }
 
     # Session cookie settings — required for LTI in iframes.
     # Moodle embeds the tool in an iframe from a different domain,

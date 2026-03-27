@@ -102,21 +102,17 @@ def validate_lti_request(req):
             host = h
 
     url = f'{scheme}://{host}{req.path}'
-    print(f'[LTI DEBUG] Reconstructed URL for signing: {url}')
+    current_app.logger.debug(f'LTI: Reconstructed URL for signing: {url}')
 
     # Verify OAuth signature
     base_string = _build_base_string(req.method, url, params)
     expected_signature = _sign(base_string, consumer_secret)
 
     if params.get('oauth_signature') != expected_signature:
-        #print shared key
-        print(f"{current_app.config['LTI_KEY']}")
-        print(current_app.config['LTI_SECRET'])
-        print(params.get('oauth_signature'))
-        print(expected_signature)
+        current_app.logger.debug('LTI: OAuth signature mismatch')
         return False, 'Invalid OAuth signature', params
     else:
-        print("Valid OAuth signature")
+        current_app.logger.debug('LTI: Valid OAuth signature')
     return True, '', params
 
 

@@ -124,6 +124,20 @@ def create_app(config_class=Config):
         from models.database import User, Problem, TestCase, Submission, LTISession  # noqa: F401
         db.create_all()
 
+        # Enable WAL mode for SQLite — allows concurrent reads during writes
+        from sqlalchemy import text, event
+        if 'sqlite' in app.config['SQLALCHEMY_DATABASE_URI']:
+            with db.engine.connect() as conn:
+                conn.execute(text("PRAGMA journal_mode=WAL"))
+                conn.commit()
+
+            # Ensure every new SQLite connection enables WAL
+            @event.listens_for(db.engine, "connect")
+            def _set_sqlite_pragma(dbapi_conn, connection_record):
+                cursor = dbapi_conn.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.close()
+
     # ------------------------------------------------------------------
     # Jinja2 custom filters
     # ------------------------------------------------------------------
