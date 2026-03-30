@@ -9,6 +9,7 @@ import os
 import json
 import uuid
 import tempfile
+from collections import defaultdict
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash, session, current_app, jsonify)
 from werkzeug.utils import secure_filename
@@ -342,10 +343,17 @@ def generate_batch(problem_id):
 @admin_bp.route('/problem/<int:problem_id>/submissions')
 @require_instructor
 def view_submissions(problem_id):
-    """View all submissions for a problem."""
+    """View all submissions for a problem (optionally filtered by student)."""
     problem = Problem.query.get_or_404(problem_id)
-    submissions = Submission.query.filter_by(problem_id=problem_id)\
-        .options(joinedload(Submission.user))\
+    user_id = request.args.get('user_id', type=int)
+    
+    query = Submission.query.filter_by(problem_id=problem_id)
+    filter_user = None
+    if user_id:
+        query = query.filter_by(user_id=user_id)
+        filter_user = User.query.get(user_id)
+        
+    submissions = query.options(joinedload(Submission.user))\
         .order_by(Submission.created_at.desc()).all()
 
     for sub in submissions:
@@ -355,7 +363,65 @@ def view_submissions(problem_id):
             sub.parsed_results = []
 
     return render_template('admin/submissions.html',
-                           problem=problem, submissions=submissions)
+                           problem=problem, submissions=submissions, filter_user=filter_user)
+
+
+# ── Student Search ───────────────────────────────────────────────────
+
+@admin_bp.route('/student_search', methods=['GET'])
+@require_instructor
+def student_search():
+    q = request.args.get('q', '').strip()
+    students_data = []
+    
+    # Preload all active problems
+    problems = Problem.query.filter_by(is_active=True).all()
+    
+    if q:
+        # 1 query for students matching the term
+        students = User.query.filter(User.role == 'student', User.name.ilike(f'%{q}%')).all()
+        
+        if students:
+            student_ids = [s.id for s in students]
+            
+            # 1 query for all submissions for these students (avoiding N+1)
+            subs = db.session.query(
+                Submission.user_id, 
+                Submission.problem_id, 
+                Submission.verdict
+            ).filter(Submission.user_id.in_(student_ids)).all()
+            
+            # Map submissions: user_id -> problem_id -> list of verdicts
+            subs_map = defaultdict(lambda: defaultdict(list))
+            for s in subs:
+                subs_map[s.user_id][s.problem_id].append(s.verdict)
+            
+            for student in students:
+                problem_status = {}
+                for p in problems:
+                    verdicts = subs_map[student.id].get(p.id, [])
+                    
+                    if not verdicts:
+                        status = 'Not Attempted'
+                        css_class = 'status-inactive'
+                    elif 'AC' in verdicts:
+                        status = 'Solved'
+                        css_class = 'status-active'
+                    else:
+                        status = 'Attempted'
+                        css_class = 'verdict-CE'
+                        
+                    problem_status[p.id] = {
+                        'status': status,
+                        'css_class': css_class
+                    }
+                
+                students_data.append({
+                    'user': student,
+                    'problem_status': problem_status
+                })
+                
+    return render_template('admin/student_search.html', q=q, students_data=students_data, problems=problems)
 
 
 @admin_bp.route('/problem/<int:problem_id>/delete', methods=['POST'])

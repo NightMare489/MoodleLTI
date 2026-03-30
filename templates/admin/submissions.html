@@ -5,10 +5,17 @@
     <div class="page-header">
         <div>
             <h1>📊 Submissions</h1>
-            <p class="subtitle">{{ problem.title }}</p>
+            <p class="subtitle">{{ problem.title }}{% if filter_user %} — showing only <strong>{{ filter_user.name
+                    }}</strong>{% endif %}</p>
         </div>
-        <a href="{{ url_for('admin.edit_problem', problem_id=problem.id) }}" class="btn btn-secondary">← Edit
-            Problem</a>
+        <div style="display: flex; gap: 0.5rem;">
+            {% if filter_user %}
+            <a href="{{ url_for('admin.student_search', q=filter_user.name) }}" class="btn btn-secondary">← Back to
+                Search</a>
+            {% endif %}
+            <a href="{{ url_for('admin.edit_problem', problem_id=problem.id) }}" class="btn btn-secondary">← Edit
+                Problem</a>
+        </div>
     </div>
 
     {% if submissions %}

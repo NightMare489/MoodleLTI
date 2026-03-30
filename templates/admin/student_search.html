@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Student Search{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1>🔍 Student Search</h1>
+            <p class="subtitle">Search for a student to view their progress across all problems</p>
+        </div>
+    </div>
+
+    <!-- Search Form -->
+    <div class="card" style="max-width: 600px; margin-bottom: 2rem;">
+        <form method="GET" action="{{ url_for('admin.student_search') }}" class="form-layout">
+            <div class="form-group" style="display: flex; gap: 1rem; align-items: flex-end;">
+                <div style="flex: 1; margin-bottom: 0;">
+                    <label for="searchQuery">Student Name</label>
+                    <input type="text" id="searchQuery" name="q" class="form-input" value="{{ q }}"
+                        placeholder="Enter student name..." required autofocus>
+                </div>
+                <button type="submit" class="btn btn-primary">Search</button>
+            </div>
+        </form>
+    </div>
+
+    {% if q %}
+    {% if students_data %}
+    <h2>Results for "{{ q }}"</h2>
+    <br>
+    <div class="problem-grid" style="display: grid; grid-template-columns: 1fr; gap: 2rem;">
+        {% for data in students_data %}
+        <div class="card" style="margin-bottom: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="margin-bottom: 0; font-size: 1.3rem;">
+                    👤 {{ data.user.name }}
+                    <span
+                        style="font-size: 0.9rem; color: var(--text-secondary); margin-left: 0.5rem; font-family: var(--font-mono);">
+                        {{ data.user.email }}
+                    </span>
+                </h3>
+            </div>
+
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">ID</th>
+                            <th>Problem Title</th>
+                            <th style="width: 25%;">Status</th>
+                            <th style="width: 20%;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in problems %}
+                        {% set status_info = data.problem_status[p.id] %}
+                        <tr>
+                            <td class="mono">{{ p.id }}</td>
+                            <td><strong>{{ p.title }}</strong></td>
+                            <td>
+                                <span class="status-badge {{ status_info.css_class }}">
+                                    {{ status_info.status }}
+                                </span>
+                            </td>
+                            <td class="actions-cell">
+                                <a href="{{ url_for('admin.view_submissions', problem_id=p.id, user_id=data.user.id) }}"
+                                    class="btn btn-sm btn-outline">View Submissions</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state card text-center" style="padding: 3rem;">
+        <div class="empty-icon" style="font-size: 3rem; margin-bottom: 1rem;">❌</div>
+        <h3>No students found</h3>
+        <p class="text-secondary">Could not find any students matching "{{ q }}".</p>
+    </div>
+    {% endif %}
+    {% endif %}
+
+</div>
+{% endblock %}
