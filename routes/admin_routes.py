@@ -81,6 +81,7 @@ def new_problem():
             memory_limit_mb=int(request.form.get('memory_limit_mb', 256)),
             solution_code=request.form.get('solution_code', '').strip(),
             solution_language=request.form.get('solution_language', 'c'),
+            code_template=request.form.get('code_template', '').strip(),
             created_by=session['user_id'],
         )
         db.session.add(problem)
@@ -107,6 +108,7 @@ def edit_problem(problem_id):
         problem.is_active = 'is_active' in request.form
         problem.solution_code = request.form.get('solution_code', '').strip()
         problem.solution_language = request.form.get('solution_language', 'c')
+        problem.code_template = request.form.get('code_template', '').strip()
         db.session.commit()
         flash('Problem updated successfully!', 'success')
         return _token_redirect('admin.edit_problem', problem_id=problem.id)

@@ -135,6 +135,37 @@ def view_problem(problem_id):
                            submissions=submissions)
 
 
+def _verify_locked_lines(submitted_code, template_code):
+    """
+    Ensure all lines in template_code that contain '@lock' exist
+    in the submitted_code, preserving relative order.
+    """
+    if not template_code or not template_code.strip():
+        return True, ""
+
+    locked_lines = [line.strip() for line in template_code.splitlines() if '@lock' in line]
+    if not locked_lines:
+        return True, ""
+
+    sub_lines = [line.strip() for line in submitted_code.splitlines()]
+    
+    sub_idx = 0
+    for req in locked_lines:
+        found = False
+        while sub_idx < len(sub_lines):
+            if sub_lines[sub_idx] == req:
+                found = True
+                sub_idx += 1 # consume and proceed
+                break
+            sub_idx += 1
+        
+        if not found:
+            clean_req = req.replace('// @lock', '').replace('# @lock', '').replace('@lock', '').strip()
+            return False, f"Mandatory template line was modified: '{clean_req}'"
+            
+    return True, ""
+
+
 @student_bp.route('/problem/<int:problem_id>/submit', methods=['POST'])
 @require_lti_session
 def submit_code(problem_id):
@@ -153,6 +184,12 @@ def submit_code(problem_id):
 
     if language not in current_app.config['SUPPORTED_LANGUAGES']:
         flash('Unsupported language.', 'error')
+        return _token_redirect('student.view_problem', problem_id=problem_id)
+
+    # Validate locked lines template compliance
+    is_valid, err_msg = _verify_locked_lines(code, problem.code_template)
+    if not is_valid:
+        flash(err_msg, 'error')
         return _token_redirect('student.view_problem', problem_id=problem_id)
 
     # Get all test cases (not just samples)

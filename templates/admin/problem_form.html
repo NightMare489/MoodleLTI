@@ -70,7 +70,9 @@ Given an array of integers, find two numbers that add up to a target.
                 </div>
                 {% endif %}
 
-                <!-- Solution Code (hidden textarea, synced by JS) -->
+                <!-- Code Template & Solution (hidden textareas, synced by JS) -->
+                <input type="hidden" name="code_template" id="codeTemplateInput"
+                    value="{{ problem.code_template if problem else '' }}">
                 <input type="hidden" name="solution_code" id="solutionCodeInput"
                     value="{{ problem.solution_code if problem else '' }}">
                 <input type="hidden" name="solution_language" id="solutionLangInput"
@@ -88,6 +90,19 @@ Given an array of integers, find two numbers that add up to a target.
         </div>
 
         {% if problem %}
+        <!-- Code Template Editor -->
+        <div class="card">
+            <h3>🔒 Code Template for Students</h3>
+            <p class="text-secondary" style="font-size:0.9rem; margin-bottom:0.5rem;">
+                The initial code visible to students. Append <code>@lock</code> within a comment to make that line <b>uneditable</b>.
+            </p>
+            <div id="templateEditor" class="code-editor"
+                style="height:250px; border:1px solid var(--border); border-radius:8px;">{{ problem.code_template or '' }}</div>
+            <p class="text-secondary" style="margin-top:0.5rem; font-size:0.8rem;">
+                Example: <code>int add(int a, int b) { // @lock</code> or <code>def add(a, b): # @lock</code>
+            </p>
+        </div>
+
         <!-- Solution Code Editor -->
         <div class="card">
             <h3>🧪 Solution Code <span class="hint">(used to generate test case outputs)</span></h3>
@@ -104,7 +119,7 @@ Given an array of integers, find two numbers that add up to a target.
                 style="height:250px; border:1px solid var(--border); border-radius:8px;">{{ problem.solution_code or ''
                 }}</div>
             <p class="text-secondary" style="margin-top:0.5rem; font-size:0.8rem;">
-                Save the problem after editing the solution code, then use "Generate Output" below.
+                Save the problem after editing the template or solution code.
             </p>
         </div>
 
@@ -281,6 +296,18 @@ Given an array of integers, find two numbers that add up to a target.
 {% block scripts %}
 {% if problem %}
 <script>
+    // ── Code Template Editor (Ace) ──────────────────────────────────
+    const templateEditor = ace.edit("templateEditor");
+    templateEditor.setTheme("ace/theme/one_dark");
+    templateEditor.setFontSize(13);
+    templateEditor.setOptions({
+        fontFamily: "'JetBrains Mono', monospace",
+        showPrintMargin: false,
+        wrap: true,
+        tabSize: 4,
+        useSoftTabs: true,
+    });
+
     // ── Solution Code Editor (Ace) ──────────────────────────────────
     const solEditor = ace.edit("solutionEditor");
     solEditor.setTheme("ace/theme/one_dark");
@@ -300,14 +327,20 @@ Given an array of integers, find two numbers that add up to a target.
     };
 
     const solLangSelect = document.getElementById('solutionLangSelect');
-    solEditor.session.setMode(modeMap[solLangSelect.value] || 'ace/mode/c_cpp');
-    solLangSelect.addEventListener('change', function () {
-        solEditor.session.setMode(modeMap[this.value] || 'ace/mode/c_cpp');
-    });
+    
+    function setEditorModes() {
+        const mode = modeMap[solLangSelect.value] || 'ace/mode/c_cpp';
+        solEditor.session.setMode(mode);
+        templateEditor.session.setMode(mode);
+    }
+    
+    setEditorModes();
+    solLangSelect.addEventListener('change', setEditorModes);
 
-    // Sync solution editor → hidden form fields before any form submit
+    // Sync editors → hidden form fields before any form submit
     document.querySelectorAll('form').forEach(function (f) {
         f.addEventListener('submit', function () {
+            document.getElementById('codeTemplateInput').value = templateEditor.getValue();
             document.getElementById('solutionCodeInput').value = solEditor.getValue();
             document.getElementById('solutionLangInput').value = solLangSelect.value;
         });

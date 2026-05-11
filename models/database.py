@@ -36,6 +36,7 @@ class Problem(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     solution_code = db.Column(db.Text, default='')       # correct solution for generator
     solution_language = db.Column(db.String(20), default='c')
+    code_template = db.Column(db.Text, default='')       # template with lock markers
 
     test_cases = db.relationship('TestCase', backref='problem', lazy='dynamic',
                                  cascade='all, delete-orphan')
