@@ -10,7 +10,7 @@ from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash, session, current_app)
 from sqlalchemy import func, case
 from sqlalchemy.orm import joinedload
-from models.database import db, Problem, TestCase, Submission, LTISession
+from models.database import db, Problem, TestCase, Submission, LTISession, SharedLink, User, SystemSetting
 from lti.auth import require_lti_session
 from lti.outcomes import send_grade
 from judge.runner import judge_submission
@@ -36,6 +36,15 @@ def _get_lock_info():
     if ids:
         return ids, len(ids) == 1
     return None, False
+
+
+def _get_active_semester():
+    """Get active semester name. First check session, then query system setting."""
+    if 'semester' in session and session['semester']:
+        return session['semester']
+    setting = SystemSetting.query.filter_by(key='current_semester').first()
+    return setting.value if setting else 'Summer 2025/2026'
+
 
 
 @student_bp.route('/problems')
@@ -70,7 +79,8 @@ def problem_list():
             func.max(case((Submission.verdict == 'AC', 1), else_=0)).label('has_ac')
         ).filter(
             Submission.user_id == user_id,
-            Submission.problem_id.in_(problem_ids)
+            Submission.problem_id.in_(problem_ids),
+            Submission.semester == _get_active_semester()
         ).group_by(Submission.problem_id).all()
 
         best_map = {row.problem_id: row for row in best_subs}
@@ -125,7 +135,7 @@ def view_problem(problem_id):
     # Get user's previous submissions
     user_id = session['user_id']
     submissions = Submission.query.filter_by(
-        user_id=user_id, problem_id=problem_id
+        user_id=user_id, problem_id=problem_id, semester=_get_active_semester()
     ).order_by(Submission.created_at.desc()).limit(10).all()
 
     return render_template('student/problem.html',
@@ -210,6 +220,7 @@ def submit_code(problem_id):
     )
 
     # Create submission record
+    active_sem = _get_active_semester()
     submission = Submission(
         user_id=session['user_id'],
         problem_id=problem_id,
@@ -219,6 +230,7 @@ def submit_code(problem_id):
         score=result['score'],
         results_json=json.dumps(result['results']),
         error_message=result['error'],
+        semester=active_sem,
     )
     db.session.add(submission)
     db.session.commit()
@@ -234,7 +246,8 @@ def submit_code(problem_id):
                 solved = Submission.query.filter(
                     Submission.user_id == session['user_id'],
                     Submission.problem_id.in_(locked_ids),
-                    Submission.verdict == 'AC'
+                    Submission.verdict == 'AC',
+                    Submission.semester == active_sem
                 ).with_entities(Submission.problem_id).distinct().count()
                 grade = solved / len(locked_ids)
             else:
@@ -242,7 +255,8 @@ def submit_code(problem_id):
                 has_ac = Submission.query.filter_by(
                     user_id=session['user_id'],
                     problem_id=problem_id,
-                    verdict='AC'
+                    verdict='AC',
+                    semester=active_sem
                 ).first() is not None
                 grade = 1.0 if has_ac else 0.0
 
@@ -317,18 +331,70 @@ def my_submissions():
         return _token_redirect('student.view_problem', problem_id=locked_ids[0])
 
     user_id = session['user_id']
+    active_sem = _get_active_semester()
 
     if locked_ids:
         # Sheet mode: show only submissions for sheet problems
         submissions = Submission.query.filter(
             Submission.user_id == user_id,
-            Submission.problem_id.in_(locked_ids)
+            Submission.problem_id.in_(locked_ids),
+            Submission.semester == active_sem
         ).options(
             joinedload(Submission.problem)
         ).order_by(Submission.created_at.desc()).limit(50).all()
     else:
-        submissions = Submission.query.filter_by(user_id=user_id)\
+        submissions = Submission.query.filter_by(user_id=user_id, semester=active_sem)\
             .options(joinedload(Submission.problem))\
             .order_by(Submission.created_at.desc()).limit(50).all()
 
     return render_template('student/submissions.html', submissions=submissions)
+
+
+@student_bp.route('/sheet/<string:code>', methods=['GET', 'POST'])
+def enter_sheet(code):
+    """Bypass LTI login for students using a direct practice link."""
+    shared_link = SharedLink.query.filter_by(code=code).first_or_404()
+
+    if request.method == 'POST':
+        regnum = request.form.get('regnum', '').strip()
+        if not regnum:
+            flash('Registration Number is required.', 'error')
+            return render_template('student/sheet_login.html', shared_link=shared_link)
+
+        # Check if user already exists by regnum
+        user = User.query.filter_by(regnum=regnum).first()
+        if not user:
+            # Check if there is already a temp user (just in case they logged in with this regnum before)
+            temp_lti_id = f'temp-{regnum}'
+            user = User.query.filter_by(lti_user_id=temp_lti_id).first()
+            if not user:
+                user = User(
+                    lti_user_id=temp_lti_id,
+                    regnum=regnum,
+                    name=f'Student {regnum}',
+                    role='student'
+                )
+                db.session.add(user)
+                db.session.flush()
+
+        db.session.commit()
+
+        # Load problems from the shared link
+        try:
+            problem_ids = [int(pid.strip()) for pid in shared_link.problem_ids.split(',') if pid.strip()]
+        except ValueError:
+            problem_ids = []
+
+        # Setup cookie session
+        session['user_id'] = user.id
+        session['user_name'] = user.name
+        session['role'] = user.role
+        session['locked_problem_ids'] = problem_ids
+        session['lti_session_id'] = None
+        session['semester'] = shared_link.semester
+        session.modified = True
+
+        flash(f'Logged in successfully under registration number {regnum}!', 'success')
+        return _token_redirect('student.problem_list')
+
+    return render_template('student/sheet_login.html', shared_link=shared_link)

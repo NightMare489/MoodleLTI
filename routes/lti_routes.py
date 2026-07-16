@@ -74,14 +74,25 @@ def launch():
 
     # Find or create user
     user = User.query.filter_by(lti_user_id=user_data['lti_user_id']).first()
+
+    # If not found by LTI User ID, check if there is an existing student user with the matching registration number
+    if not user and user_data.get('regnum'):
+        user = User.query.filter_by(regnum=user_data['regnum']).first()
+        if user:
+            # Match and merge! Update the user's lti_user_id to the real Moodle ID
+            user.lti_user_id = user_data['lti_user_id']
+
     if user:
         # Update existing user info
         user.name = user_data['name']
         user.email = user_data['email']
         user.role = user_data['role']
+        if user_data.get('regnum'):
+            user.regnum = user_data['regnum']
     else:
         user = User(
             lti_user_id=user_data['lti_user_id'],
+            regnum=user_data.get('regnum'),
             name=user_data['name'],
             email=user_data['email'],
             role=user_data['role'],

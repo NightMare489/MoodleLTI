@@ -143,6 +143,7 @@ def extract_lti_user_data(params):
         'resource_link_id': params.get('resource_link_id', ''),
         'outcome_service_url': params.get('lis_outcome_service_url', ''),
         'result_sourcedid': params.get('lis_result_sourcedid', ''),
+        'regnum': params.get('lis_person_sourcedid') or params.get('ext_user_username') or None,
     }
 
 

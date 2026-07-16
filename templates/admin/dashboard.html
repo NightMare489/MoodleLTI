@@ -2,12 +2,28 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <div class="container">
-    <div class="page-header">
+     <div class="page-header" style="align-items: flex-start;">
         <div>
             <h1>📋 Problem Dashboard</h1>
             <p class="subtitle">Manage your programming problems and test cases</p>
+            <div style="margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem;">
+                <span class="status-badge status-active" style="font-size: 0.8rem; padding: 4px 10px;">Active Semester: {{ active_semester }}</span>
+                <button type="button" class="btn btn-sm btn-outline" onclick="document.getElementById('semesterForm').style.display='flex';" style="padding: 2px 8px; font-size: 0.75rem; border-radius: var(--radius-sm);">
+                    ⚙️ Change
+                </button>
+            </div>
+            
+            <form id="semesterForm" method="POST" action="{{ url_for('admin.change_semester') }}" style="display: none; align-items: center; gap: 0.5rem; margin-top: 0.75rem;">
+                <input type="text" name="semester" value="{{ active_semester }}" placeholder="e.g. Summer 2025/2026" required
+                       style="padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-input); color: var(--text-primary); font-size: 0.85rem;">
+                <button type="submit" class="btn btn-sm btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; border-radius: var(--radius-sm);">Update</button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('semesterForm').style.display='none';" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; border-radius: var(--radius-sm);">Cancel</button>
+            </form>
         </div>
-        <a href="{{ url_for('admin.new_problem') }}" class="btn btn-primary">+ New Problem</a>
+        <div style="display: flex; gap: 0.75rem; align-self: center;">
+            <a href="{{ url_for('admin.shared_links') }}" class="btn btn-outline" style="border-radius: var(--radius);">🔗 Practice Links</a>
+            <a href="{{ url_for('admin.new_problem') }}" class="btn btn-primary" style="border-radius: var(--radius);">+ New Problem</a>
+        </div>
     </div>
 
     {% if problems %}

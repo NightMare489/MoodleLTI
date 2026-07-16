@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Sign In - {{ shared_link.title }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 450px; margin-top: 4rem; margin-bottom: 4rem;">
+    <div class="card" style="padding: 2.5rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);">
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 0.5rem;">⚡</div>
+            <h2 style="font-size: 1.6rem; font-weight: 700; margin-bottom: 0.25rem;">AAST CodeJudge</h2>
+            <p class="subtitle" style="font-size: 0.9rem;">Practice Link: <strong>{{ shared_link.title }}</strong></p>
+            <!-- <span class="status-badge status-active" style="margin-top: 0.5rem; display: inline-block; font-size: 0.8rem; padding: 4px 10px;">
+                Semester: {{ shared_link.semester }}
+            </span> -->
+        </div>
+
+        <form method="POST" class="form-layout" style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="form-group">
+                <label for="regnum"
+                    style="font-weight: 600; margin-bottom: 0.5rem; display: block; color: var(--text-primary);">Registration
+                    Number</label>
+                <input type="text" id="regnum" name="regnum" class="form-input" required autofocus
+                    placeholder="25101234"
+                    style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-input); color: var(--text-primary); font-family: var(--font-mono); font-size: 1.1rem; text-align: center;">
+            </div>
+
+            <button type="submit" class="btn btn-primary"
+                style="width: 100%; padding: 0.75rem; font-size: 1rem; margin-top: 0.5rem; border-radius: var(--radius);">
+                Start Solving
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

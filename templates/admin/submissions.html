@@ -2,19 +2,31 @@
 {% block title %}Submissions - {{ problem.title }}{% endblock %}
 {% block content %}
 <div class="container">
-    <div class="page-header">
+    <div class="page-header" style="flex-wrap: wrap; gap: 1rem;">
         <div>
             <h1>📊 Submissions</h1>
-            <p class="subtitle">{{ problem.title }}{% if filter_user %} — showing only <strong>{{ filter_user.name
-                    }}</strong>{% endif %}</p>
+            <p class="subtitle">{{ problem.title }}{% if filter_user %} — showing only <strong>{{ filter_user.name }}</strong>{% endif %}</p>
         </div>
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <form method="GET" action="{{ url_for('admin.view_submissions', problem_id=problem.id) }}" style="display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                {% if filter_user %}
+                <input type="hidden" name="user_id" value="{{ filter_user.id }}">
+                {% endif %}
+                <label for="semester" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0;">Semester:</label>
+                <select name="semester" onchange="this.form.submit()" style="padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-input); color: var(--text-primary); font-size: 0.85rem;">
+                    <option value="All" {% if selected_semester == 'All' %}selected{% endif %}>All Semesters</option>
+                    {% for sem in semesters %}
+                    <option value="{{ sem }}" {% if sem == selected_semester %}selected{% endif %}>
+                        {{ sem }}{% if sem == active_semester %} (Active){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </form>
+
             {% if filter_user %}
-            <a href="{{ url_for('admin.student_search', q=filter_user.name) }}" class="btn btn-secondary">← Back to
-                Search</a>
+            <a href="{{ url_for('admin.student_search', q=filter_user.name) }}" class="btn btn-secondary">← Back to Search</a>
             {% endif %}
-            <a href="{{ url_for('admin.edit_problem', problem_id=problem.id) }}" class="btn btn-secondary">← Edit
-                Problem</a>
+            <a href="{{ url_for('admin.edit_problem', problem_id=problem.id) }}" class="btn btn-secondary">← Edit Problem</a>
         </div>
     </div>
 
@@ -26,6 +38,7 @@
                     <th>#</th>
                     <th>Student</th>
                     <th>Language</th>
+                    <th>Semester</th>
                     <th>Verdict</th>
                     <th>Score</th>
                     <th>Details</th>
@@ -37,8 +50,24 @@
                 {% for sub in submissions %}
                 <tr>
                     <td class="mono">{{ sub.id }}</td>
-                    <td>{{ sub.user.name }}</td>
+                    <td>
+                        <strong>{{ sub.user.name }}</strong>
+                        {% if sub.user.regnum %}
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">
+                            Reg: {{ sub.user.regnum }}
+                        </div>
+                        {% endif %}
+                    </td>
                     <td class="mono">{{ sub.language }}</td>
+                    <td>
+                        {% if sub.semester.startswith('Archived:') %}
+                        <span class="status-badge status-inactive" style="font-size: 0.75rem; border-color: rgba(248, 81, 73, 0.2); color: var(--text-secondary); background: transparent; padding: 2px 6px;" title="{{ sub.semester }}">
+                            📂 Archived
+                        </span>
+                        {% else %}
+                        <span style="font-size: 0.85rem;">{{ sub.semester }}</span>
+                        {% endif %}
+                    </td>
                     <td>
                         <span class="verdict verdict-{{ sub.verdict }}">{{ sub.verdict }}</span>
                     </td>
@@ -68,8 +97,8 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-icon">📭</div>
-        <h3>No submissions yet</h3>
-        <p>Students haven't submitted any solutions for this problem.</p>
+        <h3>No submissions found</h3>
+        <p>No submissions matching the filters exist for this problem.</p>
     </div>
     {% endif %}
 </div>

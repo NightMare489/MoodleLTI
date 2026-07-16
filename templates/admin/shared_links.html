@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Practice Links{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1>🔗 Direct Practice Links</h1>
+            <p class="subtitle">Generate links with predefined problems for students to bypass Moodle when it is offline.</p>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; align-items: start; margin-top: 1.5rem;">
+        <!-- Left: Create Link Form -->
+        <div class="card">
+            <h3>⚡ Create New Link</h3>
+            <form method="POST" action="{{ url_for('admin.shared_links') }}" class="form-layout" style="display: flex; flex-direction: column; gap: 1.2rem;">
+                <div class="form-group">
+                    <label for="title">Sheet Title</label>
+                    <input type="text" id="title" name="title" class="form-input" placeholder="e.g. Week 1 Practice" required>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: block; margin-bottom: 0.5rem;">Predefined Problems</label>
+                    {% if problems %}
+                    <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; background: var(--bg-primary); display: flex; flex-direction: column; gap: 0.5rem;">
+                        {% for p in problems %}
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" name="problems" value="{{ p.id }}">
+                            <span style="font-size: 0.9rem;">#{{ p.id }} - {{ p.title }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">No active problems available. Please create active problems first.</p>
+                    {% endif %}
+                </div>
+
+                <div style="font-size: 0.85rem; color: var(--text-secondary); background: var(--bg-hover); padding: 0.75rem; border-radius: var(--radius); border-left: 3px solid var(--accent);">
+                    The generated link will be associated with the active semester: <strong>{{ active_semester }}</strong>.
+                </div>
+
+                <button type="submit" class="btn btn-primary" {% if not problems %}disabled{% endif %}>
+                    Generate Link
+                </button>
+            </form>
+        </div>
+
+        <!-- Right: Links List -->
+        <div class="card">
+            <h3>📋 Existing Practice Links</h3>
+            {% if links %}
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">Code</th>
+                            <th>Title & Problems</th>
+                            <th style="width: 20%;">Semester</th>
+                            <th style="width: 30%; text-align: right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for link in links %}
+                        <tr>
+                            <td>
+                                <span class="mono" style="font-weight: 700; color: var(--accent); background: var(--accent-bg); padding: 3px 6px; border-radius: 4px;">
+                                    {{ link.code }}
+                                </span>
+                            </td>
+                            <td>
+                                <strong>{{ link.title }}</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                    Problems: {{ link.problem_titles | join(', ') }}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge status-active" style="font-size: 0.75rem;">
+                                    {{ link.semester }}
+                                </span>
+                            </td>
+                            <td style="text-align: right;">
+                                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                                    <button class="btn btn-sm btn-outline" onclick="copyLink('{{ request.host_url }}sheet/{{ link.code }}')">
+                                        📋 Copy
+                                    </button>
+                                    <form method="POST" action="{{ url_for('admin.delete_shared_link', link_id=link.id) }}" onsubmit="return confirm('Are you sure you want to delete this practice link? This will lock students out of this direct link.');" style="margin:0;">
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            Delete
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔗</div>
+                <p>No practice links generated yet.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function copyLink(url) {
+    navigator.clipboard.writeText(url).then(function() {
+        alert('Link copied to clipboard:\n' + url);
+    }, function(err) {
+        // Fallback
+        var tempInput = document.createElement("input");
+        tempInput.value = url;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand("copy");
+        document.body.removeChild(tempInput);
+        alert('Link copied to clipboard:\n' + url);
+    });
+}
+</script>
+{% endblock %}

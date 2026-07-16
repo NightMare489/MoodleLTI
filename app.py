@@ -121,11 +121,51 @@ def create_app(config_class=Config):
     # ------------------------------------------------------------------
     with app.app_context():
         # Import models so SQLAlchemy knows about them
-        from models.database import User, Problem, TestCase, Submission, LTISession  # noqa: F401
+        from models.database import User, Problem, TestCase, Submission, LTISession, SharedLink, SystemSetting  # noqa: F401
         db.create_all()
 
+        # Database migrations (schema updates)
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+
+        # 1. Ensure users table has regnum column
+        if 'users' in inspector.get_table_names():
+            columns = [c['name'] for c in inspector.get_columns('users')]
+            if 'regnum' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN regnum VARCHAR(100)"))
+                    conn.commit()
+                app.logger.info("Migrated users table: added regnum column.")
+
+        # 2. Ensure submissions table has semester column (defaulting to 'Spring 2025/2026')
+        if 'submissions' in inspector.get_table_names():
+            columns = [c['name'] for c in inspector.get_columns('submissions')]
+            if 'semester' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE submissions ADD COLUMN semester VARCHAR(50) NOT NULL DEFAULT 'Spring 2025/2026'"))
+                    conn.commit()
+                app.logger.info("Migrated submissions table: added semester column.")
+
+        # 3. Ensure shared_links table has semester column (defaulting to 'Summer 2025/2026')
+        if 'shared_links' in inspector.get_table_names():
+            columns = [c['name'] for c in inspector.get_columns('shared_links')]
+            if 'semester' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE shared_links ADD COLUMN semester VARCHAR(50) NOT NULL DEFAULT 'Summer 2025/2026'"))
+                    conn.commit()
+                app.logger.info("Migrated shared_links table: added semester column.")
+
+        # 4. Seed system settings (current_semester)
+        if 'system_settings' in inspector.get_table_names():
+            with db.engine.connect() as conn:
+                res = conn.execute(text("SELECT 1 FROM system_settings WHERE key = 'current_semester'")).first()
+                if not res:
+                    conn.execute(text("INSERT INTO system_settings (key, value) VALUES ('current_semester', 'Summer 2025/2026')"))
+                    conn.commit()
+                    app.logger.info("Seeded current_semester in system_settings.")
+
         # Enable WAL mode for SQLite — allows concurrent reads during writes
-        from sqlalchemy import text, event
+        from sqlalchemy import event
         if 'sqlite' in app.config['SQLALCHEMY_DATABASE_URI']:
             with db.engine.connect() as conn:
                 conn.execute(text("PRAGMA journal_mode=WAL"))

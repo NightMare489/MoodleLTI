@@ -15,7 +15,7 @@ from flask import (Blueprint, render_template, request, redirect,
 from werkzeug.utils import secure_filename
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
-from models.database import db, Problem, TestCase, Submission, User, ProblemImage
+from models.database import db, Problem, TestCase, Submission, User, ProblemImage, SharedLink, SystemSetting
 from lti.auth import require_instructor
 from judge.runner import compile_code, run_test_case
 
@@ -64,7 +64,10 @@ def dashboard():
         p.tc_count = tc_counts.get(p.id, 0)
         p.sub_count = sub_counts.get(p.id, 0)
 
-    return render_template('admin/dashboard.html', problems=problems)
+    active_sem_setting = SystemSetting.query.filter_by(key='current_semester').first()
+    active_semester = active_sem_setting.value if active_sem_setting else 'Summer 2025/2026'
+
+    return render_template('admin/dashboard.html', problems=problems, active_semester=active_semester)
 
 
 # ── Create / Edit Problem ────────────────────────────────────────────
@@ -345,15 +348,29 @@ def generate_batch(problem_id):
 @admin_bp.route('/problem/<int:problem_id>/submissions')
 @require_instructor
 def view_submissions(problem_id):
-    """View all submissions for a problem (optionally filtered by student)."""
+    """View all submissions for a problem (optionally filtered by student and semester)."""
     problem = Problem.query.get_or_404(problem_id)
     user_id = request.args.get('user_id', type=int)
     
+    # Retrieve all unique semesters for submissions of this problem
+    semesters = [r[0] for r in db.session.query(Submission.semester).filter_by(problem_id=problem_id).distinct().all()]
+    active_sem_setting = SystemSetting.query.filter_by(key='current_semester').first()
+    active_semester = active_sem_setting.value if active_sem_setting else 'Summer 2025/2026'
+    if active_semester not in semesters:
+        semesters.append(active_semester)
+    clean_semesters = sorted(list({s for s in semesters}))
+
+    selected_semester = request.args.get('semester', '').strip() or 'All'
+    
     query = Submission.query.filter_by(problem_id=problem_id)
-    filter_user = None
     if user_id:
         query = query.filter_by(user_id=user_id)
         filter_user = User.query.get(user_id)
+    else:
+        filter_user = None
+
+    if selected_semester != 'All':
+        query = query.filter_by(semester=selected_semester)
         
     submissions = query.options(joinedload(Submission.user))\
         .order_by(Submission.created_at.desc()).all()
@@ -365,7 +382,8 @@ def view_submissions(problem_id):
             sub.parsed_results = []
 
     return render_template('admin/submissions.html',
-                           problem=problem, submissions=submissions, filter_user=filter_user)
+                           problem=problem, submissions=submissions, filter_user=filter_user,
+                           semesters=clean_semesters, selected_semester=selected_semester, active_semester=active_semester)
 
 
 # ── Student Search ───────────────────────────────────────────────────
@@ -375,6 +393,18 @@ def view_submissions(problem_id):
 def student_search():
     q = request.args.get('q', '').strip()
     students_data = []
+    
+    # Retrieve all unique semesters for submissions
+    semesters = [r[0] for r in db.session.query(Submission.semester).distinct().all()]
+    active_sem_setting = SystemSetting.query.filter_by(key='current_semester').first()
+    active_semester = active_sem_setting.value if active_sem_setting else 'Summer 2025/2026'
+    if active_semester not in semesters:
+        semesters.append(active_semester)
+    
+    # Filter out archived prefixes for clean list
+    clean_semesters = sorted(list({s for s in semesters if not s.startswith('Archived:')}))
+    
+    selected_semester = request.args.get('semester', '').strip() or active_semester
     
     # Preload all active problems
     problems = Problem.query.filter_by(is_active=True).all()
@@ -386,12 +416,15 @@ def student_search():
         if students:
             student_ids = [s.id for s in students]
             
-            # 1 query for all submissions for these students (avoiding N+1)
+            # 1 query for all submissions for these students in the selected semester (avoiding N+1)
             subs = db.session.query(
                 Submission.user_id, 
                 Submission.problem_id, 
                 Submission.verdict
-            ).filter(Submission.user_id.in_(student_ids)).all()
+            ).filter(
+                Submission.user_id.in_(student_ids),
+                Submission.semester == selected_semester
+            ).all()
             
             # Map submissions: user_id -> problem_id -> list of verdicts
             subs_map = defaultdict(lambda: defaultdict(list))
@@ -423,7 +456,124 @@ def student_search():
                     'problem_status': problem_status
                 })
                 
-    return render_template('admin/student_search.html', q=q, students_data=students_data, problems=problems)
+    return render_template('admin/student_search.html', q=q, students_data=students_data, problems=problems,
+                           semesters=clean_semesters, selected_semester=selected_semester, active_semester=active_semester)
+
+
+@admin_bp.route('/change_semester', methods=['POST'])
+@require_instructor
+def change_semester():
+    """Update the current active semester system setting."""
+    new_semester = request.form.get('semester', '').strip()
+    if new_semester:
+        setting = SystemSetting.query.filter_by(key='current_semester').first()
+        if not setting:
+            setting = SystemSetting(key='current_semester', value=new_semester)
+            db.session.add(setting)
+        else:
+            setting.value = new_semester
+        db.session.commit()
+        flash(f'Current semester updated to: {new_semester}', 'success')
+    else:
+        flash('Invalid semester name.', 'error')
+    return _token_redirect('admin.dashboard')
+
+
+@admin_bp.route('/shared_links', methods=['GET', 'POST'])
+@require_instructor
+def shared_links():
+    """List and manage practice links (direct regnum sheets)."""
+    import random
+    import string
+    
+    active_sem_setting = SystemSetting.query.filter_by(key='current_semester').first()
+    active_semester = active_sem_setting.value if active_sem_setting else 'Summer 2025/2026'
+    
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip() or 'Practice Sheet'
+        selected_problem_ids = request.form.getlist('problems')
+        
+        if not selected_problem_ids:
+            flash('Please select at least one problem.', 'error')
+            return _token_redirect('admin.shared_links')
+            
+        problem_ids_str = ','.join(selected_problem_ids)
+        
+        # Generate unique 6-character code
+        chars = string.ascii_letters + string.digits
+        while True:
+            code = ''.join(random.choices(chars, k=6))
+            if not SharedLink.query.filter_by(code=code).first():
+                break
+                
+        new_link = SharedLink(
+            code=code,
+            title=title,
+            problem_ids=problem_ids_str,
+            semester=active_semester,
+            created_by=session['user_id']
+        )
+        db.session.add(new_link)
+        db.session.commit()
+        flash(f'Practice link created successfully with code: {code}', 'success')
+        return _token_redirect('admin.shared_links')
+        
+    links = SharedLink.query.order_by(SharedLink.created_at.desc()).all()
+    problems = Problem.query.filter_by(is_active=True).all()
+    
+    # For displaying problem titles in links list, build a quick mapping
+    all_problems = {p.id: p.title for p in Problem.query.all()}
+    for link in links:
+        try:
+            pids = [int(x.strip()) for x in link.problem_ids.split(',') if x.strip()]
+        except ValueError:
+            pids = []
+        link.problem_titles = [all_problems.get(pid, f'Problem #{pid}') for pid in pids]
+        
+    return render_template('admin/shared_links.html', links=links, problems=problems, active_semester=active_semester)
+
+
+@admin_bp.route('/shared_links/<int:link_id>/delete', methods=['POST'])
+@require_instructor
+def delete_shared_link(link_id):
+    """Delete a practice/shared link."""
+    link = SharedLink.query.get_or_404(link_id)
+    db.session.delete(link)
+    db.session.commit()
+    flash('Practice link deleted.', 'success')
+    return _token_redirect('admin.shared_links')
+
+
+@admin_bp.route('/student/<int:user_id>/reset', methods=['POST'])
+@require_instructor
+def reset_student_submissions(user_id):
+    """Reset submissions for a student on the selected semester by archiving them."""
+    user = User.query.get_or_404(user_id)
+    problem_id = request.form.get('problem_id', type=int)
+    selected_semester = request.form.get('semester', '').strip()
+    
+    query = Submission.query.filter_by(user_id=user_id)
+    if problem_id:
+        query = query.filter_by(problem_id=problem_id)
+        
+    if selected_semester:
+        query = query.filter(Submission.semester == selected_semester)
+    else:
+        active_sem_setting = SystemSetting.query.filter_by(key='current_semester').first()
+        active_sem = active_sem_setting.value if active_sem_setting else 'Summer 2025/2026'
+        query = query.filter(Submission.semester == active_sem)
+        selected_semester = active_sem
+        
+    subs_to_archive = query.all()
+    for sub in subs_to_archive:
+        if not sub.semester.startswith('Archived:'):
+            sub.semester = f'Archived: {sub.semester}'
+            
+    db.session.commit()
+    
+    flash(f"Archived {len(subs_to_archive)} submissions for student {user.name}.", "success")
+    q = request.form.get('q', '')
+    return _token_redirect('admin.student_search', q=q, semester=selected_semester)
 
 
 @admin_bp.route('/problem/<int:problem_id>/delete', methods=['POST'])
