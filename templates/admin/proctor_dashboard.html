@@ -343,6 +343,11 @@ function pollWebRTCSignals(sessionUuid, pc) {
     }, 1000);
 }
 
+// Export functions to global window scope for inline event handlers and SPA navigation
+window.inspectSession = inspectSession;
+window.closeInspectionModal = closeInspectionModal;
+window.escapeHtml = escapeHtml;
+
 // Start polling session list every 3 seconds
 fetchSessions();
 setInterval(fetchSessions, 3000);

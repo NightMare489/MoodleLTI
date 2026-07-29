@@ -86,8 +86,8 @@
         });
     }
 
-    // Overlay displayed when screen share is stopped or session is locked
-    function showLockedOverlay(message) {
+    // Overlay displayed when screen share is stopped, unsupported, or session is locked
+    function showLockedOverlay(message, allowReload = true) {
         isCaptured = false;
         let overlay = document.getElementById('proctor-locked-overlay');
         if (!overlay) {
@@ -95,32 +95,38 @@
             overlay.id = 'proctor-locked-overlay';
             overlay.style.cssText = `
                 position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px);
+                background: rgba(15, 23, 42, 0.96); backdrop-filter: blur(10px);
                 z-index: 9999999; display: flex; align-items: center; justify-content: center;
                 font-family: system-ui, -apple-system, sans-serif; color: #ffffff; text-align: center;
             `;
             document.body.appendChild(overlay);
         }
 
+        const btnHtml = allowReload ? `
+            <button id="btn-reload-proctor" style="
+                background: #2563eb; color: #ffffff; border: none;
+                border-radius: 8px; padding: 0.75rem 1.5rem; font-weight: 600; cursor: pointer; width: 100%; margin-top: 1.25rem;
+            ">
+                Re-share Screen
+            </button>
+        ` : '';
+
         overlay.innerHTML = `
             <div style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 2.5rem; max-width: 460px; width: 90%;">
-                <h2 style="font-size: 1.4rem; color: #f87171; font-weight: 700; margin-bottom: 0.75rem;">Session Locked</h2>
-                <p style="color: #cbd5e1; font-size: 0.925rem; line-height: 1.5; margin-bottom: 1.5rem;">${message}</p>
-                <button id="btn-reload-proctor" style="
-                    background: #2563eb; color: #ffffff; border: none;
-                    border-radius: 8px; padding: 0.75rem 1.5rem; font-weight: 600; cursor: pointer; width: 100%;
-                ">
-                    Re-share Screen
-                </button>
+                <h2 style="font-size: 1.4rem; color: #f87171; font-weight: 700; margin-bottom: 0.75rem;">Access Restricted</h2>
+                <p style="color: #cbd5e1; font-size: 0.925rem; line-height: 1.5; margin-bottom: 0;">${message}</p>
+                ${btnHtml}
             </div>
         `;
 
-        const btn = document.getElementById('btn-reload-proctor');
-        if (btn) {
-            btn.onclick = function () {
-                isCaptured = false;
-                location.reload();
-            };
+        if (allowReload) {
+            const btn = document.getElementById('btn-reload-proctor');
+            if (btn) {
+                btn.onclick = function () {
+                    isCaptured = false;
+                    location.reload();
+                };
+            }
         }
     }
 
@@ -474,7 +480,7 @@
 
         // Check browser support
         if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-            alert('Your browser does not support Screen Capture API required for proctored exams. Please use Google Chrome, Microsoft Edge, or Firefox.');
+            showLockedOverlay('Screen monitoring is required for this exam, but your current browser does not support the Screen Capture API. Please open this exam in Google Chrome, Microsoft Edge, or Firefox on a desktop computer.', false);
             return;
         }
 

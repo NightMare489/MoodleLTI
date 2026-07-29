@@ -158,7 +158,7 @@
                 document.body.appendChild(scriptTag);
             } else {
                 try {
-                    (new Function(s.innerText))();
+                    (1, eval)(s.innerText);
                 } catch (e) {
                     console.warn('SPA script re-eval warning:', e);
                 }
