@@ -27,10 +27,12 @@ def create_app(config_class=Config):
     from routes.lti_routes import lti_bp
     from routes.admin_routes import admin_bp
     from routes.student_routes import student_bp
+    from routes.proctor_routes import proctor_bp
 
     app.register_blueprint(lti_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(student_bp)
+    app.register_blueprint(proctor_bp)
 
     # ------------------------------------------------------------------
     # Cookie-less session fallback via signed URL token (_lt param).
@@ -44,6 +46,10 @@ def create_app(config_class=Config):
     @app.before_request
     def _restore_session_from_token():
         """If Flask cookie session is empty, try the _lt URL token."""
+        # Enable screenshare if explicitly requested via query parameter
+        if request.args.get('screenshare') == 'true':
+            session['screenshare_required'] = True
+
         if 'user_id' in session:
             # Cookie session works — store the token on request for
             # propagation but don't overwrite the session.
@@ -58,6 +64,7 @@ def create_app(config_class=Config):
                     'role': session.get('role', 'student'),
                     'lti_session_id': session.get('lti_session_id'),
                     'locked_problem_ids': session.get('locked_problem_ids'),
+                    'screenshare_required': session.get('screenshare_required', False),
                 })
             return
 
@@ -73,6 +80,8 @@ def create_app(config_class=Config):
             session['role'] = data.get('role', 'student')
             session['lti_session_id'] = data.get('lti_session_id')
             session['locked_problem_ids'] = data.get('locked_problem_ids')
+            if data.get('screenshare_required'):
+                session['screenshare_required'] = True
             session.modified = True
             request._session_token = token
         else:
@@ -80,7 +89,7 @@ def create_app(config_class=Config):
 
     @app.context_processor
     def _inject_token_url_for():
-        """Override url_for in templates to auto-append _lt token."""
+        """Override url_for in templates to auto-append _lt token and screenshare=true."""
         _original = url_for
 
         def url_for_with_token(endpoint, **kwargs):
@@ -90,9 +99,12 @@ def create_app(config_class=Config):
             token = getattr(request, '_session_token', '')
             if token and '_lt' not in kwargs:
                 kwargs['_lt'] = token
+            if session.get('screenshare_required') and 'screenshare' not in kwargs:
+                kwargs['screenshare'] = 'true'
             return _original(endpoint, **kwargs)
 
         return {'url_for': url_for_with_token}
+
 
     # ------------------------------------------------------------------
     # Root redirect
@@ -121,7 +133,7 @@ def create_app(config_class=Config):
     # ------------------------------------------------------------------
     with app.app_context():
         # Import models so SQLAlchemy knows about them
-        from models.database import User, Problem, TestCase, Submission, LTISession, SharedLink, SystemSetting  # noqa: F401
+        from models.database import User, Problem, TestCase, Submission, LTISession, SharedLink, SystemSetting, ProctorSession, ProctorEvent  # noqa: F401
         db.create_all()
 
         # Database migrations (schema updates)
@@ -146,7 +158,7 @@ def create_app(config_class=Config):
                     conn.commit()
                 app.logger.info("Migrated submissions table: added semester column.")
 
-        # 3. Ensure shared_links table has semester column (defaulting to 'Summer 2025/2026')
+        # 3. Ensure shared_links table has semester and screenshare_required columns
         if 'shared_links' in inspector.get_table_names():
             columns = [c['name'] for c in inspector.get_columns('shared_links')]
             if 'semester' not in columns:
@@ -154,6 +166,12 @@ def create_app(config_class=Config):
                     conn.execute(text("ALTER TABLE shared_links ADD COLUMN semester VARCHAR(50) NOT NULL DEFAULT 'Summer 2025/2026'"))
                     conn.commit()
                 app.logger.info("Migrated shared_links table: added semester column.")
+            if 'screenshare_required' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE shared_links ADD COLUMN screenshare_required BOOLEAN DEFAULT 0"))
+                    conn.commit()
+                app.logger.info("Migrated shared_links table: added screenshare_required column.")
+
 
         # 4. Seed system settings (current_semester)
         if 'system_settings' in inspector.get_table_names():

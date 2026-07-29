@@ -497,6 +497,7 @@ def shared_links():
             flash('Please select at least one problem.', 'error')
             return _token_redirect('admin.shared_links')
             
+        screenshare_req = 'screenshare_required' in request.form
         problem_ids_str = ','.join(selected_problem_ids)
         
         # Generate unique 6-character code
@@ -511,12 +512,14 @@ def shared_links():
             title=title,
             problem_ids=problem_ids_str,
             semester=active_semester,
+            screenshare_required=screenshare_req,
             created_by=session['user_id']
         )
         db.session.add(new_link)
         db.session.commit()
         flash(f'Practice link created successfully with code: {code}', 'success')
         return _token_redirect('admin.shared_links')
+
         
     links = SharedLink.query.order_by(SharedLink.created_at.desc()).all()
     problems = Problem.query.filter_by(is_active=True).all()

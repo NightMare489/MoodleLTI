@@ -35,9 +35,15 @@ var/
 .DS_Store
 *.swp
 
-# Flask-specific
+# Environment variables and secrets
+.env
+.env.*
+
+# Databases
+*.db
+judge.db
 instance/
-# Typically used for local configuration files and databases that should not be committed
+
 
 # Specific to testing
 .coverage

@@ -22,7 +22,7 @@
             <tbody>
                 {% for sub in submissions %}
                 <tr class="clickable-row"
-                    onclick="window.location='{{ url_for('student.view_result', submission_id=sub.id) }}'">
+                    onclick="if(window.spaNavigate){spaNavigate('{{ url_for('student.view_result', submission_id=sub.id) }}',true)}else{window.location='{{ url_for('student.view_result', submission_id=sub.id) }}'}">
                     <td class="mono">{{ sub.id }}</td>
                     <td><strong>{{ sub.problem.title }}</strong></td>
                     <td class="mono">{{ sub.language }}</td>

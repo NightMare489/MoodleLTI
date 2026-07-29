@@ -122,6 +122,9 @@ def launch():
         except ValueError:
             locked_problem_ids = None
 
+    # Check screenshare requirement parameter
+    custom_screenshare = (params.get('custom_screenshare') == 'true') or (request.args.get('screenshare') == 'true')
+
     # Session data
     sess_data = {
         'user_id': user.id,
@@ -129,6 +132,7 @@ def launch():
         'role': user.role,
         'lti_session_id': lti_session.id,
         'locked_problem_ids': locked_problem_ids,
+        'screenshare_required': custom_screenshare,
     }
 
     # Try to set the Flask cookie session (works when cookies aren't blocked)
@@ -137,6 +141,8 @@ def launch():
     session['role'] = sess_data['role']
     session['lti_session_id'] = sess_data['lti_session_id']
     session['locked_problem_ids'] = sess_data['locked_problem_ids']
+    if custom_screenshare:
+        session['screenshare_required'] = True
     session.modified = True
 
     # Also create a signed URL token as a fallback for when
@@ -144,15 +150,20 @@ def launch():
     token = _make_launch_token(sess_data)
 
     # Determine redirect target
+    kw = {'_lt': token}
+    if custom_screenshare:
+        kw['screenshare'] = 'true'
+
     if user.role == 'instructor':
-        target = url_for('admin.dashboard', _lt=token)
+        target = url_for('admin.dashboard', **kw)
     else:
         if locked_problem_ids and len(locked_problem_ids) == 1:
             # Single problem — direct open (existing behaviour)
-            target = url_for('student.view_problem', problem_id=locked_problem_ids[0], _lt=token)
+            target = url_for('student.view_problem', problem_id=locked_problem_ids[0], **kw)
         else:
             # Multiple problems (sheet) or no lock — show list
-            target = url_for('student.problem_list', _lt=token)
+            target = url_for('student.problem_list', **kw)
+
 
     return _client_side_redirect(target)
 

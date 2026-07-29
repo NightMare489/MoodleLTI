@@ -12,13 +12,21 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <!-- KaTeX for LaTeX math rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <!-- Ace Editor CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/theme-one_dark.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/mode-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/mode-c_cpp.min.js"></script>
     <!-- Apply saved theme before paint to avoid flash -->
+
     <script>
         (function () {
             var t = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', t);
         })();
     </script>
+    <!-- Proctor Engine (loaded globally in head) -->
+    <script src="{{ url_for('static', filename='js/proctor.js') }}"></script>
     {% block head %}{% endblock %}
 </head>
 
@@ -40,10 +48,12 @@
                 {% if not (locked_single and not is_instructor) %}
                 {% if is_instructor %}
                 <a href="{{ url_for('admin.dashboard') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('proctor.admin_proctor_dashboard') }}" class="nav-link" style="color: #60a5fa; font-weight: 600;">🎥 Live Proctoring</a>
                 <a href="{{ url_for('admin.shared_links') }}" class="nav-link">Practice Links</a>
                 <a href="{{ url_for('admin.student_search') }}" class="nav-link">Student Search</a>
                 <a href="{{ url_for('admin.new_problem') }}" class="nav-link">+ New Problem</a>
                 {% else %}
+
                 <a href="{{ url_for('student.problem_list') }}" class="nav-link">Problems</a>
                 <a href="{{ url_for('student.my_submissions') }}" class="nav-link">My Submissions</a>
                 {% endif %}
@@ -117,6 +127,9 @@
             });
         })();
     </script>
+    <!-- Single-Page Application (SPA) Engine -->
+    <script src="{{ url_for('static', filename='js/spa_navigation.js') }}"></script>
+
 </body>
 
 </html>

@@ -2,10 +2,15 @@
 {% block title %}Practice Links{% endblock %}
 {% block content %}
 <div class="container">
-    <div class="page-header">
+    <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div>
             <h1>🔗 Direct Practice Links</h1>
             <p class="subtitle">Generate links with predefined problems for students to bypass Moodle when it is offline.</p>
+        </div>
+        <div>
+            <a href="{{ url_for('proctor.admin_proctor_dashboard') }}" class="btn btn-primary" style="display: flex; align-items: center; gap: 0.5rem; background: #2563eb;">
+                🎥 Live Proctoring Dashboard
+            </a>
         </div>
     </div>
 
@@ -22,7 +27,7 @@
                 <div class="form-group">
                     <label style="display: block; margin-bottom: 0.5rem;">Predefined Problems</label>
                     {% if problems %}
-                    <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; background: var(--bg-primary); display: flex; flex-direction: column; gap: 0.5rem;">
+                    <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; background: var(--bg-primary); display: flex; flex-direction: column; gap: 0.5rem;">
                         {% for p in problems %}
                         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                             <input type="checkbox" name="problems" value="{{ p.id }}">
@@ -33,6 +38,16 @@
                     {% else %}
                     <p style="color: var(--text-muted); font-size: 0.9rem;">No active problems available. Please create active problems first.</p>
                     {% endif %}
+                </div>
+
+                <div class="form-group" style="background: var(--bg-hover); padding: 0.75rem; border-radius: var(--radius); border: 1px solid var(--border);">
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600; font-size: 0.95rem; margin: 0;">
+                        <input type="checkbox" name="screenshare_required" value="1">
+                        <span>🖥️ Require Live Screen Proctoring (<code>&screenshare=true</code>)</span>
+                    </label>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.35rem; margin-left: 1.75rem;">
+                        Requires students to share their entire monitor screen to enter the exam.
+                    </div>
                 </div>
 
                 <div style="font-size: 0.85rem; color: var(--text-secondary); background: var(--bg-hover); padding: 0.75rem; border-radius: var(--radius); border-left: 3px solid var(--accent);">
@@ -69,6 +84,11 @@
                             </td>
                             <td>
                                 <strong>{{ link.title }}</strong>
+                                {% if link.screenshare_required %}
+                                <span style="background: rgba(37, 99, 235, 0.15); color: #2563eb; font-size: 0.75rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 0.5rem;">
+                                    🖥️ Proctored
+                                </span>
+                                {% endif %}
                                 <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">
                                     Problems: {{ link.problem_titles | join(', ') }}
                                 </div>
@@ -80,8 +100,8 @@
                             </td>
                             <td style="text-align: right;">
                                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                                    <button class="btn btn-sm btn-outline" onclick="copyLink('{{ request.host_url }}sheet/{{ link.code }}')">
-                                        📋 Copy
+                                    <button class="btn btn-sm btn-outline" onclick="copyLink('{{ request.host_url }}sheet/{{ link.code }}{% if link.screenshare_required %}?screenshare=true{% endif %}')">
+                                        📋 Copy Link
                                     </button>
                                     <form method="POST" action="{{ url_for('admin.delete_shared_link', link_id=link.id) }}" onsubmit="return confirm('Are you sure you want to delete this practice link? This will lock students out of this direct link.');" style="margin:0;">
                                         <button type="submit" class="btn btn-sm btn-danger">
@@ -95,6 +115,7 @@
                     </tbody>
                 </table>
             </div>
+
             {% else %}
             <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
                 <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔗</div>

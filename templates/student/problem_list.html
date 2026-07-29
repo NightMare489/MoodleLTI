@@ -56,4 +56,22 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+    ;(function () {
+        function runInit() {
+            if (typeof initProctoring === 'function') {
+                initProctoring({
+                    isRequired: {{ 'true' if session.get('screenshare_required') or request.args.get('screenshare') == 'true' else 'false' }}
+                });
+            }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', runInit);
+        } else {
+            runInit();
+        }
+    })();
+</script>
 {% endblock %}
+

@@ -154,7 +154,48 @@ class SharedLink(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
+    screenshare_required = db.Column(db.Boolean, default=False)
     creator = db.relationship('User', backref='created_shared_links')
 
     def __repr__(self):
         return f'<SharedLink {self.code} ({self.semester})>'
+
+
+class ProctorSession(db.Model):
+    """Tracks active student proctoring sessions."""
+    __tablename__ = 'proctor_sessions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_uuid = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    problem_id = db.Column(db.Integer, db.ForeignKey('problems.id'), nullable=True)
+    shared_link_code = db.Column(db.String(10), nullable=True)
+    status = db.Column(db.String(20), default='ACTIVE', index=True)  # ACTIVE, LOCKED, STOPPED, ENDED
+    is_screen_active = db.Column(db.Boolean, default=True)
+    paste_count = db.Column(db.Integer, default=0)
+
+    last_seen_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship('User', backref='proctor_sessions')
+    problem = db.relationship('Problem', backref='proctor_sessions')
+    events = db.relationship('ProctorEvent', backref='proctor_session', lazy='dynamic', cascade='all, delete-orphan')
+
+    def __repr__(self):
+        return f'<ProctorSession #{self.id} User={self.user_id} Status={self.status}>'
+
+
+class ProctorEvent(db.Model):
+    """Logs anti-cheating audit events (e.g. SCREEN_STOPPED, PASTE_EVENT, LOCK_ACTION)."""
+    __tablename__ = 'proctor_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    proctor_session_id = db.Column(db.Integer, db.ForeignKey('proctor_sessions.id'), nullable=False, index=True)
+    event_type = db.Column(db.String(50), nullable=False)  # SCREEN_STOPPED, PASTE_EVENT, LOCKED, UNLOCKED
+    details = db.Column(db.Text, default='')
+    frame_snapshot = db.Column(db.Text, nullable=True)  # Proof snapshot image base64 if applicable
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f'<ProctorEvent {self.event_type} for Session {self.proctor_session_id}>'
+

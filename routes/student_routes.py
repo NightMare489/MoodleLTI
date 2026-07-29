@@ -7,10 +7,12 @@ Problem viewing, code submission, and submission history.
 import json
 import threading
 from flask import (Blueprint, render_template, request, redirect,
-                   url_for, flash, session, current_app)
+                   url_for, flash, session, current_app, jsonify)
+
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import func, case
 from sqlalchemy.orm import joinedload
-from models.database import db, Problem, TestCase, Submission, LTISession, SharedLink, User, SystemSetting
+from models.database import db, Problem, TestCase, Submission, LTISession, SharedLink, User, SystemSetting, ProctorSession
 from lti.auth import require_lti_session
 from lti.outcomes import send_grade
 from judge.runner import judge_submission
@@ -145,6 +147,34 @@ def view_problem(problem_id):
                            submissions=submissions)
 
 
+@student_bp.route('/api/problem/<int:problem_id>', methods=['GET'])
+@require_lti_session
+def api_get_problem(problem_id):
+    """Return JSON details of a problem for dynamic AJAX switching."""
+    problem = Problem.query.get_or_404(problem_id)
+    sample_cases = TestCase.query.filter_by(problem_id=problem.id, is_sample=True).order_by(TestCase.order).all()
+
+    user_id = session.get('user_id')
+    active_sem = _get_active_semester()
+    latest_sub = Submission.query.filter_by(user_id=user_id, problem_id=problem.id, semester=active_sem).order_by(Submission.created_at.desc()).first()
+
+    return jsonify({
+        'id': problem.id,
+        'title': problem.title,
+        'description': problem.description,
+        'time_limit_ms': problem.time_limit_ms,
+        'memory_limit_mb': problem.memory_limit_mb,
+        'code_template': problem.code_template or '',
+        'latest_code': latest_sub.code if latest_sub else '',
+        'latest_language': latest_sub.language if latest_sub else 'c',
+        'sample_cases': [{
+            'input_data': tc.input_data,
+            'expected_output': tc.expected_output
+        } for tc in sample_cases]
+    })
+
+
+
 def _verify_locked_lines(submitted_code, template_code):
     """
     Ensure all lines in template_code that contain '@lock' exist
@@ -184,6 +214,23 @@ def submit_code(problem_id):
     if not problem.is_active:
         return render_template('student/problem_closed.html',
                                problem=problem), 403
+
+    # Enforce active screen proctoring check on backend
+    if session.get('screenshare_required'):
+        user_id = session.get('user_id')
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=15)
+
+        proc_sess = ProctorSession.query.filter(
+            ProctorSession.user_id == user_id,
+            ProctorSession.is_screen_active == True,
+            ProctorSession.status == 'ACTIVE',
+            ProctorSession.last_seen_at >= cutoff
+        ).order_by(ProctorSession.last_seen_at.desc()).first()
+
+        if not proc_sess:
+            flash('🔒 Screen monitoring is required. You must share your entire screen before submitting your code.', 'error')
+            return _token_redirect('student.view_problem', problem_id=problem_id)
 
     code = request.form.get('code', '').strip()
     language = request.form.get('language', 'python')
@@ -392,9 +439,17 @@ def enter_sheet(code):
         session['locked_problem_ids'] = problem_ids
         session['lti_session_id'] = None
         session['semester'] = shared_link.semester
+
+        if shared_link.screenshare_required or request.args.get('screenshare') == 'true':
+            session['screenshare_required'] = True
+
         session.modified = True
 
         flash(f'Logged in successfully under registration number {regnum}!', 'success')
         return _token_redirect('student.problem_list')
 
+    if request.args.get('screenshare') == 'true' or shared_link.screenshare_required:
+        session['screenshare_required'] = True
+
     return render_template('student/sheet_login.html', shared_link=shared_link)
+

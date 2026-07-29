@@ -1,8 +1,15 @@
 import os
 import sys
 
-
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+try:
+    from dotenv import load_dotenv
+    dotenv_path = os.path.join(BASE_DIR, '.env')
+    if os.path.exists(dotenv_path):
+        load_dotenv(dotenv_path)
+except ImportError:
+    pass
 
 
 class Config:
@@ -52,3 +59,18 @@ class Config:
             'run_cmd': '{output}',
         },
     }
+
+    # WebRTC TURN Server
+    TURN_SERVER_URL = os.environ.get(
+        'TURN_SERVER_URL',
+        ''
+    )
+    TURN_SERVER_USERNAME = os.environ.get(
+        'TURN_SERVER_USERNAME',
+        ''
+    )
+    TURN_SERVER_CREDENTIAL = os.environ.get(
+        'TURN_SERVER_CREDENTIAL',
+        ''
+    )
+
