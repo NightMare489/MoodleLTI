@@ -386,6 +386,67 @@ def view_submissions(problem_id):
                            semesters=clean_semesters, selected_semester=selected_semester, active_semester=active_semester)
 
 
+@admin_bp.route('/submissions')
+@require_instructor
+def all_submissions():
+    """View all submissions across all problems, ordered newest first."""
+    selected_problem_id = request.args.get('problem_id', type=int)
+    selected_semester = request.args.get('semester', '').strip() or 'All'
+    selected_verdict = request.args.get('verdict', '').strip() or 'All'
+    q = request.args.get('q', '').strip()
+
+    problems = Problem.query.order_by(Problem.title.asc()).all()
+
+    semesters = [r[0] for r in db.session.query(Submission.semester).distinct().all()]
+    active_sem_setting = SystemSetting.query.filter_by(key='current_semester').first()
+    active_semester = active_sem_setting.value if active_sem_setting else 'Summer 2025/2026'
+    if active_semester not in semesters:
+        semesters.append(active_semester)
+    clean_semesters = sorted(list({s for s in semesters}))
+
+    query = Submission.query.join(Submission.user).join(Submission.problem)
+
+    if selected_problem_id:
+        query = query.filter(Submission.problem_id == selected_problem_id)
+
+    if selected_semester != 'All':
+        query = query.filter(Submission.semester == selected_semester)
+
+    if selected_verdict != 'All':
+        query = query.filter(Submission.verdict == selected_verdict)
+
+    if q:
+        query = query.filter(
+            (User.name.ilike(f'%{q}%')) |
+            (User.regnum.ilike(f'%{q}%')) |
+            (Problem.title.ilike(f'%{q}%'))
+        )
+
+    submissions = query.options(
+        joinedload(Submission.user),
+        joinedload(Submission.problem)
+    ).order_by(Submission.created_at.desc()).limit(250).all()
+
+    for sub in submissions:
+        try:
+            sub.parsed_results = json.loads(sub.results_json) if sub.results_json else []
+        except (json.JSONDecodeError, TypeError):
+            sub.parsed_results = []
+
+    verdicts = ['AC', 'WA', 'TLE', 'MLE', 'RE', 'CE']
+
+    return render_template('admin/all_submissions.html',
+                           submissions=submissions,
+                           problems=problems,
+                           semesters=clean_semesters,
+                           verdicts=verdicts,
+                           selected_problem_id=selected_problem_id,
+                           selected_semester=selected_semester,
+                           selected_verdict=selected_verdict,
+                           active_semester=active_semester,
+                           q=q)
+
+
 # ── Student Search ───────────────────────────────────────────────────
 
 @admin_bp.route('/student_search', methods=['GET'])

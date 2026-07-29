@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Submissions - AAST CodeJudge{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header" style="flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h1>Submissions</h1>
+            <p class="subtitle">All student submissions across all problems (newest first).</p>
+        </div>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="card" style="margin-bottom: 1.5rem; padding: 1rem;">
+        <form method="GET" action="{{ url_for('admin.all_submissions') }}" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; margin: 0;">
+            <div style="flex: 1; min-width: 180px;">
+                <label for="q" style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem;">Search:</label>
+                <input type="text" id="q" name="q" value="{{ q }}" placeholder="Student name, regnum, or problem..." class="form-input" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;">
+            </div>
+
+            <div style="min-width: 180px;">
+                <label for="problem_id" style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem;">Problem:</label>
+                <select name="problem_id" id="problem_id" onchange="this.form.submit()" class="form-select" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;">
+                    <option value="">All Problems</option>
+                    {% for p in problems %}
+                    <option value="{{ p.id }}" {% if selected_problem_id == p.id %}selected{% endif %}>
+                        #{{ p.id }} - {{ p.title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="min-width: 140px;">
+                <label for="semester" style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem;">Semester:</label>
+                <select name="semester" id="semester" onchange="this.form.submit()" class="form-select" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;">
+                    <option value="All" {% if selected_semester == 'All' %}selected{% endif %}>All Semesters</option>
+                    {% for sem in semesters %}
+                    <option value="{{ sem }}" {% if sem == selected_semester %}selected{% endif %}>
+                        {{ sem }}{% if sem == active_semester %} (Active){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="min-width: 120px;">
+                <label for="verdict" style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem;">Verdict:</label>
+                <select name="verdict" id="verdict" onchange="this.form.submit()" class="form-select" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;">
+                    <option value="All" {% if selected_verdict == 'All' %}selected{% endif %}>All Verdicts</option>
+                    {% for v in verdicts %}
+                    <option value="{{ v }}" {% if v == selected_verdict %}selected{% endif %}>{{ v }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem;">
+                <button type="submit" class="btn btn-sm btn-primary" style="padding: 0.45rem 1rem;">Filter</button>
+                {% if q or selected_problem_id or selected_semester != 'All' or selected_verdict != 'All' %}
+                <a href="{{ url_for('admin.all_submissions') }}" class="btn btn-sm btn-outline" style="padding: 0.45rem 0.8rem;">Clear</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    {% if submissions %}
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Student</th>
+                    <th>Problem</th>
+                    <th>Language</th>
+                    <th>Semester</th>
+                    <th>Verdict</th>
+                    <th>Score</th>
+                    <th>Details</th>
+                    <th>Submitted</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in submissions %}
+                <tr>
+                    <td class="mono">{{ sub.id }}</td>
+                    <td>
+                        <strong>{{ sub.user.name }}</strong>
+                        {% if sub.user.regnum %}
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">
+                            Reg: {{ sub.user.regnum }}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('admin.edit_problem', problem_id=sub.problem.id) }}" style="font-weight: 600; color: var(--text-primary);">
+                            {{ sub.problem.title }}
+                        </a>
+                    </td>
+                    <td class="mono">{{ sub.language }}</td>
+                    <td>
+                        {% if sub.semester.startswith('Archived:') %}
+                        <span class="status-badge status-inactive" style="font-size: 0.75rem;" title="{{ sub.semester }}">
+                            Archived
+                        </span>
+                        {% else %}
+                        <span style="font-size: 0.85rem;">{{ sub.semester }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="verdict verdict-{{ sub.verdict }}">{{ sub.verdict }}</span>
+                    </td>
+                    <td class="mono">{{ (sub.score * 100) | int }}%</td>
+                    <td>
+                        {% if sub.parsed_results %}
+                        <div class="mini-results">
+                            {% for r in sub.parsed_results %}
+                            <span class="mini-verdict mini-{{ r.verdict }}"
+                                title="Test {{ loop.index }}: {{ r.verdict }}">
+                                {{ '✓' if r.verdict == 'AC' else '✗' }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="text-secondary" style="font-size: 0.825rem;">{{ sub.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        <a href="{{ url_for('student.view_result', submission_id=sub.id) }}" class="btn btn-sm btn-outline"
+                            style="padding: 4px 10px; font-size: 0.8rem;">View Code</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h3>No Submissions Found</h3>
+        <p>No submissions matching your filter criteria exist.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
