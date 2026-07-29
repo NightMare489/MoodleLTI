@@ -18,18 +18,6 @@
             </div>
             {% endif %}
             <div class="card">
-                {% set pid_list = session.get('locked_problem_ids') %}
-                {% if pid_list and pid_list|length > 1 %}
-                <div class="problem-selector-bar" style="margin-bottom: 1.25rem; display: flex; gap: 0.5rem; flex-wrap: wrap; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border);">
-                    <span style="font-size: 0.85rem; color: var(--text-secondary); align-self: center; font-weight: 600;">Sheet Problems:</span>
-                    {% for pid in pid_list %}
-                    <button onclick="switchProblemDynamically({{ pid }})" type="button" class="btn btn-sm {% if pid == problem.id %}btn-primary{% else %}btn-outline{% endif %} prob-switch-btn" id="prob-btn-{{ pid }}" data-pid="{{ pid }}">
-                        #{{ pid }}
-                    </button>
-                    {% endfor %}
-                </div>
-                {% endif %}
-
                 <div class="problem-title-bar">
                     <h1 id="dyn-prob-title">{{ problem.title }}</h1>
                     <div class="problem-limits">
@@ -364,43 +352,6 @@
 </script>
 
 <script>
-
-    window.switchProblemDynamically = async function(pid) {
-        try {
-            const resp = await fetch('/api/problem/' + pid);
-            const p = await resp.json();
-
-            // Update title, limits, description
-            document.getElementById('dyn-prob-title').innerText = p.title;
-            document.getElementById('dyn-prob-time').innerText = `⏱ ${p.time_limit_ms}ms`;
-            document.getElementById('dyn-prob-mem').innerText = `💾 ${p.memory_limit_mb}MB`;
-            document.getElementById('dyn-prob-body').innerHTML = p.description;
-
-            // Update form submit target
-            document.getElementById('submitForm').action = `/problem/${p.id}/submit`;
-
-            // Update active tab buttons
-            document.querySelectorAll('.prob-switch-btn').forEach(btn => {
-                if (btn.getAttribute('data-pid') == p.id) {
-                    btn.className = 'btn btn-sm btn-primary prob-switch-btn';
-                } else {
-                    btn.className = 'btn btn-sm btn-outline prob-switch-btn';
-                }
-            });
-
-            // Update editor content
-            const newCode = p.latest_code || p.code_template || '';
-            if (window.editor) {
-                window.editor.setValue(newCode, -1);
-            }
-
-            // Update URL query string without reloading page
-            history.pushState(null, '', `/problem/${p.id}`);
-        } catch (err) {
-            console.error('Error switching problem:', err);
-        }
-    };
-
     ;(function () {
         function runInit() {
             if (typeof initProctoring === 'function') {
