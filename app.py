@@ -4,7 +4,7 @@ Main application entry point.
 """
 
 import os
-from flask import Flask, redirect, url_for, request, session
+from flask import Flask, redirect, url_for, request, session, flash
 from config import Config
 from models.database import db  # Single shared SQLAlchemy instance
 
@@ -103,8 +103,43 @@ def create_app(config_class=Config):
                 kwargs['screenshare'] = 'true'
             return _original(endpoint, **kwargs)
 
-        return {'url_for': url_for_with_token}
+        is_inst = (session.get('role') == 'instructor')
+        can_switch = is_inst or (session.get('original_role') == 'instructor')
 
+        return {
+            'url_for': url_for_with_token,
+            'is_instructor': is_inst,
+            'can_switch_mode': can_switch,
+        }
+
+    @app.route('/switch-mode', methods=['GET', 'POST'])
+    def switch_mode():
+        """Allow instructors to toggle between Instructor Mode and Student Mode via role flag."""
+        current_role = session.get('role')
+        orig_role = session.get('original_role')
+
+        if current_role != 'instructor' and orig_role != 'instructor':
+            flash('Only instructors can switch roles.', 'danger')
+            return redirect(url_for('student.problem_list'))
+
+        target = request.args.get('target') or request.form.get('target')
+        if not target:
+            target = 'student' if current_role == 'instructor' else 'instructor'
+
+        if target == 'student':
+            session['original_role'] = 'instructor'
+            session['role'] = 'student'
+            session.modified = True
+            flash('Switched to Student Mode.', 'info')
+            return redirect(url_for('student.problem_list'))
+        elif target == 'instructor':
+            session['role'] = 'instructor'
+            session['original_role'] = 'instructor'
+            session.modified = True
+            flash('Returned to Instructor Mode.', 'info')
+            return redirect(url_for('admin.dashboard'))
+
+        return redirect(url_for('student.problem_list'))
 
     # ------------------------------------------------------------------
     # Root redirect

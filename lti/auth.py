@@ -10,7 +10,7 @@ import hashlib
 import hmac
 import urllib.parse
 from functools import wraps
-from flask import request, session, redirect, url_for, abort, current_app
+from flask import request, session, redirect, url_for, abort, current_app, flash
 
 
 def _normalize_params(params):
@@ -167,7 +167,7 @@ def require_lti_session(f):
 
 
 def require_instructor(f):
-    """Decorator to ensure the user is an instructor."""
+    """Decorator to ensure the user is currently in instructor mode."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
@@ -177,6 +177,9 @@ def require_instructor(f):
                 'have expired — try relaunching.)'
             ))
         if session.get('role') != 'instructor':
+            if session.get('original_role') == 'instructor':
+                flash('Please switch to Instructor Mode to access instructor features.', 'info')
+                return redirect(url_for('student.problem_list'))
             abort(403, description='Instructor access required.')
         return f(*args, **kwargs)
     return decorated

@@ -119,6 +119,13 @@
             document.title = newDoc.title;
         }
 
+        // Update Navbar container if present
+        const newNav = newDoc.querySelector('.navbar');
+        const currentNav = document.querySelector('.navbar');
+        if (newNav && currentNav) {
+            currentNav.innerHTML = newNav.innerHTML;
+        }
+
         // Find main content container
         const newMain = newDoc.querySelector('main') || newDoc.querySelector('.main-content') || newDoc.querySelector('.container');
         const currentMain = document.querySelector('main') || document.querySelector('.main-content') || document.querySelector('.container');

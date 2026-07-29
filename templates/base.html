@@ -59,11 +59,41 @@
                 {% endif %}
                 {% endif %}
                 {% if session.get('user_name') %}
-                <span class="nav-user">
-                    <span class="user-avatar">{{ session.user_name[0] | upper }}</span>
-                    {{ session.user_name }}
-                    <span class="role-badge role-{{ session.role }}">{{ session.role }}</span>
-                </span>
+                <div style="position: relative; display: inline-block;">
+                    {% if can_switch_mode %}
+                    <button type="button" onclick="toggleUserDropdown()" class="nav-user" style="background: none; border: none; cursor: pointer; padding: 4px 10px; border-radius: var(--radius); display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="user-avatar">{{ session.user_name[0] | upper }}</span>
+                        <span>{{ session.user_name }}</span>
+                        <span class="role-badge role-{{ session.role }}">
+                            {{ session.role }}
+                        </span>
+                        <span style="font-size: 0.7rem; color: var(--text-muted);">▼</span>
+                    </button>
+                    <div id="userMenuDropdown" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 0.5rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,0.25); min-width: 220px; z-index: 1000; padding: 0.5rem 0;">
+                        <div style="padding: 0.5rem 1rem; border-bottom: 1px solid var(--border);">
+                            <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-primary);">{{ session.user_name }}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Instructor Account</div>
+                        </div>
+                        <div style="padding: 0.25rem 0;">
+                            {% if session.role == 'instructor' %}
+                            <a href="{{ url_for('switch_mode', target='student') }}" data-no-ajax="true" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; color: var(--text-primary); text-decoration: none; font-size: 0.85rem;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='none'">
+                                <span>Switch to Student Mode</span>
+                            </a>
+                            {% else %}
+                            <a href="{{ url_for('switch_mode', target='instructor') }}" data-no-ajax="true" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; color: var(--text-primary); text-decoration: none; font-size: 0.85rem;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='none'">
+                                <span>Switch to Instructor Mode</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <span class="nav-user">
+                        <span class="user-avatar">{{ session.user_name[0] | upper }}</span>
+                        {{ session.user_name }}
+                        <span class="role-badge role-{{ session.role }}">{{ session.role }}</span>
+                    </span>
+                    {% endif %}
+                </div>
                 {% endif %}
                 <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌙</button>
             </div>
@@ -71,6 +101,7 @@
     </nav>
 
     <main class="main-content">
+
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         <div class="flash-messages">
@@ -126,6 +157,22 @@
                 updateIcon();
             });
         })();
+    </script>
+
+    <!-- User Menu Dropdown Toggle -->
+    <script>
+        function toggleUserDropdown() {
+            var dropdown = document.getElementById('userMenuDropdown');
+            if (dropdown) {
+                dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+        document.addEventListener('click', function (e) {
+            var dropdown = document.getElementById('userMenuDropdown');
+            if (dropdown && !e.target.closest('#userMenuDropdown') && !e.target.closest('.nav-user')) {
+                dropdown.style.display = 'none';
+            }
+        });
     </script>
     <!-- Single-Page Application (SPA) Engine -->
     <script src="{{ url_for('static', filename='js/spa_navigation.js') }}"></script>
