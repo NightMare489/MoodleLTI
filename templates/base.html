@@ -48,7 +48,7 @@
                 {% if not (locked_single and not is_instructor) %}
                 {% if is_instructor %}
                 <a href="{{ url_for('admin.dashboard') }}" class="nav-link">Dashboard</a>
-                <a href="{{ url_for('proctor.admin_proctor_dashboard') }}" class="nav-link" style="color: #60a5fa; font-weight: 600;">🎥 Live Proctoring</a>
+                <a href="{{ url_for('proctor.admin_proctor_dashboard') }}" class="nav-link" style="color: #60a5fa; font-weight: 600;">Live Proctoring</a>
                 <a href="{{ url_for('admin.shared_links') }}" class="nav-link">Practice Links</a>
                 <a href="{{ url_for('admin.student_search') }}" class="nav-link">Student Search</a>
                 <a href="{{ url_for('admin.new_problem') }}" class="nav-link">+ New Problem</a>

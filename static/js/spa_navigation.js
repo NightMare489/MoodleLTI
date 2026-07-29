@@ -9,6 +9,7 @@
 
     // Global Link Interceptor
     document.addEventListener('click', function (e) {
+        if (e.defaultPrevented) return;
         const link = e.target.closest('a');
         if (!link) return;
 

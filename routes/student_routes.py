@@ -124,7 +124,7 @@ def view_problem(problem_id):
             return _token_redirect('student.problem_list')
 
     problem = Problem.query.get_or_404(problem_id)
-    if not problem.is_active:
+    if not problem.is_active and session.get('role') != 'instructor':
         return render_template('student/problem_closed.html',
                                problem=problem), 403
 

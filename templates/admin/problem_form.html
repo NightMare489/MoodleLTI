@@ -30,7 +30,7 @@
                 <div class="form-group">
                     <label for="description">Problem Description <span class="hint">(Markdown supported — use
                             <code>![alt|50%](image:file.png)</code> for images)</span></label>
-                    <textarea id="description" name="description" class="form-textarea" rows="12" placeholder="Write the problem statement here. You can use Markdown formatting.
+                    <textarea id="description" name="description" class="form-textarea" rows="12" placeholder="Write the problem statement here. You can use Markdown formatting and KaTeX math formulas like $x^2 + y^2 = z^2$.
 
 Example:
 ## Problem
@@ -41,11 +41,7 @@ Given an array of integers, find two numbers that add up to a target.
 - Second line: n space-separated integers
 
 ## Output
-- Two indices (0-indexed) that add up to target
-
-## Constraints
-- 2 ≤ n ≤ 10^5
-- -10^9 ≤ nums[i] ≤ 10^9" required>{{ problem.description if problem else '' }}</textarea>
+- Two indices (0-indexed) that add up to target" required>{{ problem.description if problem else '' }}</textarea>
                 </div>
 
                 <div class="form-row">
@@ -78,11 +74,14 @@ Given an array of integers, find two numbers that add up to a target.
                 <input type="hidden" name="solution_language" id="solutionLangInput"
                     value="{{ problem.solution_language if problem else 'c' }}">
 
-                <div class="form-actions">
+                <div class="form-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
                     <button type="submit" class="btn btn-primary">
                         {{ 'Save Changes' if problem else 'Create Problem' }}
                     </button>
                     {% if problem %}
+                    <a href="{{ url_for('student.view_problem', problem_id=problem.id) }}" id="previewBtn" onclick="return handlePreviewClick(event)" class="btn btn-outline">
+                        Student View Preview
+                    </a>
                     <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
                     {% endif %}
                 </div>
@@ -443,6 +442,40 @@ Given an array of integers, find two numbers that add up to a target.
             });
         });
     });
+
+    // ── Unsaved Changes Warning Before Preview ──────────────────────
+    window.isFormDirty = false;
+
+    window.handlePreviewClick = function (e) {
+        if (window.isFormDirty) {
+            const proceed = confirm("You have unsaved changes that will not appear in the preview. Proceed anyway?");
+            if (!proceed) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                return false;
+            }
+        }
+        return true;
+    };
+
+    document.querySelectorAll('form').forEach(function (f) {
+        f.querySelectorAll('input, textarea, select').forEach(function (elem) {
+            elem.addEventListener('input', function () { window.isFormDirty = true; });
+            elem.addEventListener('change', function () { window.isFormDirty = true; });
+        });
+        f.addEventListener('submit', function () {
+            window.isFormDirty = false;
+        });
+    });
+
+    if (typeof templateEditor !== 'undefined') {
+        templateEditor.on('change', function () { window.isFormDirty = true; });
+    }
+    if (typeof solEditor !== 'undefined') {
+        solEditor.on('change', function () { window.isFormDirty = true; });
+    }
 </script>
 {% endif %}
 {% endblock %}

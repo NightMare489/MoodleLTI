@@ -9,6 +9,14 @@
     <div class="problem-layout">
         <!-- Left: Problem Statement -->
         <div class="problem-statement">
+            {% if session.get('role') == 'instructor' %}
+            <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; background: var(--bg-hover); border: 1px solid var(--border); padding: 0.6rem 1rem; border-radius: var(--radius); font-size: 0.85rem;">
+                <span style="color: var(--text-secondary); font-weight: 500;">Previewing Student View</span>
+                <a href="{{ url_for('admin.edit_problem', problem_id=problem.id) }}" class="btn btn-sm btn-outline">
+                    ← Return to Edit Problem
+                </a>
+            </div>
+            {% endif %}
             <div class="card">
                 {% set pid_list = session.get('locked_problem_ids') %}
                 {% if pid_list and pid_list|length > 1 %}
