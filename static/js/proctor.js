@@ -174,20 +174,10 @@
                 showLockedOverlay('Screen sharing was stopped. Your exam input has been frozen. Please contact your instructor to resume.');
             });
 
-            // Create offscreen video & canvas elements for 480p WebP sampling
-            videoElement = document.createElement('video');
-            videoElement.srcObject = proctorStream;
-            videoElement.play();
-
-            canvasElement = document.createElement('canvas');
-            canvasElement.width = 854;  // 480p width
-            canvasElement.height = 480; // 480p height
-            canvasCtx = canvasElement.getContext('2d');
-
             // Add live proctoring active badge to top header
             addProctorBadge();
 
-            // Start sending 480p WebP frame heartbeats for fallbacks & admin grid thumbnails
+            // Start heartbeat loop for session status
             startHeartbeatLoop(config);
 
             // Start listening for admin WebRTC request_offer signals
@@ -217,12 +207,12 @@
                 ...(data.iceTransportPolicy ? { iceTransportPolicy: data.iceTransportPolicy } : {})
             };
         } catch (e) {
-            // Fallback to STUN-only if fetch fails
+            // Fallback config if fetch fails
             rtcConfig = {
                 iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ]
+                    // { urls: 'stun:stun.cloudflare.com:3478' }
+                ],
+                iceTransportPolicy: 'relay'
             };
         }
         return rtcConfig;
@@ -231,7 +221,7 @@
     async function setupWebRTCBroadcaster(stream) {
         try {
             if (peerConnection) {
-                try { peerConnection.close(); } catch(e){}
+                try { peerConnection.close(); } catch (e) { }
                 peerConnection = null;
             }
             pollIntervalMs = 1000; // Reset signal polling interval for fast handshake
@@ -246,8 +236,8 @@
                         if (!params.encodings) params.encodings = [{}];
                         params.encodings[0].maxBitrate = 600000; // 600 Kbps optimized for 480p 24 FPS
                         params.degradationPreference = 'maintain-framerate';
-                        sender.setParameters(params).catch(() => {});
-                    } catch (e) {}
+                        sender.setParameters(params).catch(() => { });
+                    } catch (e) { }
                 }
             });
 
@@ -327,12 +317,12 @@
                             await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.payload));
                             while (pendingCandidates.length > 0) {
                                 const cand = pendingCandidates.shift();
-                                try { await peerConnection.addIceCandidate(cand); } catch(e){}
+                                try { await peerConnection.addIceCandidate(cand); } catch (e) { }
                             }
                         } else if (signal.type === 'candidate' && signal.payload && peerConnection) {
                             const candidate = new RTCIceCandidate(signal.payload);
                             if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
-                                try { await peerConnection.addIceCandidate(candidate); } catch(e){}
+                                try { await peerConnection.addIceCandidate(candidate); } catch (e) { }
                             } else {
                                 pendingCandidates.push(candidate);
                             }
@@ -377,19 +367,7 @@
         document.body.appendChild(badge);
     }
 
-    // Sample current video frame to 480p WebP Base64 string
-    function captureFrame() {
-        if (!isCaptured || !videoElement || !canvasCtx) return null;
-        try {
-            canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
-            // 0.4 quality WebP compresses a 480p frame down to ~6-8 KB
-            return canvasElement.toDataURL('image/webp', 0.4);
-        } catch (e) {
-            return null;
-        }
-    }
-
-    // Send heartbeat with live WebP screen frame snapshot every 2 seconds
+    // Send heartbeat ping for session status every 2 seconds
     function startHeartbeatLoop(config) {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
 
@@ -399,9 +377,7 @@
             const payload = {
                 session_uuid: getSessionUuid(),
                 problem_id: config.problemId || null,
-                shared_link_code: config.sharedLinkCode || null,
-                // frame: captureFrame()  // Disabled: testing pure WebRTC relay. Uncomment to re-enable HTTP WebP fallback.
-                frame: null
+                shared_link_code: config.sharedLinkCode || null
             };
 
             try {
@@ -418,7 +394,7 @@
             } catch (err) {
                 console.warn('Proctor heartbeat sync issue:', err);
             }
-        }, 2000); // 2-second HTTP WebP screen frame stream
+        }, 2000);
     }
 
 
@@ -431,8 +407,7 @@
                 body: JSON.stringify({
                     session_uuid: getSessionUuid(),
                     event_type: eventType,
-                    details: details,
-                    frame: captureFrame()
+                    details: details
                 })
             });
         } catch (e) { }

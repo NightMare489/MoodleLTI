@@ -60,17 +60,10 @@ class Config:
         },
     }
 
-    # WebRTC TURN Server
-    TURN_SERVER_URL = os.environ.get(
-        'TURN_SERVER_URL',
-        ''
-    )
-    TURN_SERVER_USERNAME = os.environ.get(
-        'TURN_SERVER_USERNAME',
-        ''
-    )
-    TURN_SERVER_CREDENTIAL = os.environ.get(
-        'TURN_SERVER_CREDENTIAL',
-        ''
-    )
+    # WebRTC TURN Server (Static or Cloudflare Realtime API)
+    TURN_SERVER_URL = os.environ.get('TURN_SERVER_URL', '')
+    TURN_SERVER_USERNAME = os.environ.get('TURN_SERVER_USERNAME', '')
+    TURN_SERVER_CREDENTIAL = os.environ.get('TURN_SERVER_CREDENTIAL', '')
+    CLOUDFLARE_TURN_KEY_ID = os.environ.get('CLOUDFLARE_TURN_KEY_ID', '')
+    CLOUDFLARE_API_TOKEN = os.environ.get('CLOUDFLARE_API_TOKEN', '')
 

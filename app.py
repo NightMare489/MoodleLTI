@@ -1,6 +1,5 @@
 """
-AAST CodeJudge — LTI 1.0/1.1 Auto-Judge for Moodle
-Main application entry point.
+AAST CodeJudge LTI Portal & Live Screen Proctoring Server.
 """
 
 import os

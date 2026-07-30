@@ -9,22 +9,65 @@ from flask import Blueprint, render_template, request, jsonify, session, current
 from models.database import db, User, Problem, SharedLink, ProctorSession, ProctorEvent
 from lti.auth import require_lti_session
 
+import time
+import requests
+
 proctor_bp = Blueprint('proctor', __name__)
+
+# Cache for dynamic Cloudflare TURN credentials (cache for 12 hours)
+CF_TURN_CACHE = {'servers': None, 'expires_at': 0}
 
 
 @proctor_bp.route('/proctor/ice-config', methods=['GET'])
 def get_ice_config():
     """Return ICE server configuration (STUN + TURN) for WebRTC connections."""
+    cf_key_id = current_app.config.get('CLOUDFLARE_TURN_KEY_ID', '') or current_app.config.get('TURN_SERVER_USERNAME', '')
+    cf_api_token = current_app.config.get('CLOUDFLARE_API_TOKEN', '') or current_app.config.get('TURN_SERVER_CREDENTIAL', '')
     turn_url = current_app.config.get('TURN_SERVER_URL', '')
+
+    # 1. Dynamic Cloudflare Realtime TURN Generation
+    if cf_key_id and cf_api_token and not turn_url:
+        now = time.time()
+        if CF_TURN_CACHE['servers'] and now < CF_TURN_CACHE['expires_at']:
+            return jsonify({
+                'iceServers': CF_TURN_CACHE['servers'],
+                'iceTransportPolicy': 'relay'
+            })
+
+        try:
+            resp = requests.post(
+                f"https://rtc.live.cloudflare.com/v1/turn/keys/{cf_key_id}/credentials/generate-ice-servers",
+                headers={
+                    'Authorization': f"Bearer {cf_api_token}",
+                    'Content-Type': 'application/json'
+                },
+                json={'ttl': 86400},
+                timeout=5
+            )
+            if resp.status_code == 201:
+                data = resp.json()
+                if 'iceServers' in data:
+                    CF_TURN_CACHE['servers'] = data['iceServers']
+                    CF_TURN_CACHE['expires_at'] = now + 43200  # Cache for 12 hours
+                    return jsonify({
+                        'iceServers': data['iceServers'],
+                        'iceTransportPolicy': 'relay'
+                    })
+        except Exception as e:
+            current_app.logger.warning(f"Failed to fetch dynamic Cloudflare TURN credentials: {e}")
+
+    # 2. Static Cloudflare TURN Fallback Config
     turn_user = current_app.config.get('TURN_SERVER_USERNAME', '')
     turn_cred = current_app.config.get('TURN_SERVER_CREDENTIAL', '')
 
     ice_servers = [
-        {'urls': 'stun:stun.l.google.com:19302'},
-        {'urls': 'stun:stun1.l.google.com:19302'}
+        # {'urls': 'stun:stun.cloudflare.com:3478'}
     ]
 
-    res = {'iceServers': ice_servers}
+    res = {
+        'iceServers': ice_servers,
+        'iceTransportPolicy': 'relay'
+    }
 
     if turn_url and turn_user:
         turn_urls = [u.strip() for u in turn_url.split(',') if u.strip()]
@@ -33,20 +76,13 @@ def get_ice_config():
             'username': turn_user,
             'credential': turn_cred
         })
-        # Force all media through TURN relay (bypass direct P2P).
-        # Remove this line after confirming TURN works on university network.
-        res['iceTransportPolicy'] = 'relay'
 
     return jsonify(res)
 
 
-# In-memory cache for live screen WebP frame snapshots (key: session_uuid -> base64 frame string)
-ACTIVE_FRAMES = {}
-
-
 @proctor_bp.route('/proctor/heartbeat', methods=['POST'])
 def proctor_heartbeat():
-    """Receive student screen frame snapshots and telemetry events."""
+    """Receive student heartbeat ping and telemetry events."""
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
 
@@ -59,15 +95,10 @@ def proctor_heartbeat():
 
     problem_id = data.get('problem_id')
     shared_link_code = data.get('shared_link_code')
-    frame = data.get('frame')  # Base64 WebP image
     event_type = data.get('event_type')
     details = data.get('details', '')
 
     now = datetime.now(timezone.utc)
-
-    # Store latest active frame in memory cache for live HTTPS snapshot feed
-    if frame:
-        ACTIVE_FRAMES[session_uuid] = frame
 
     # Find or create ProctorSession
     proc_sess = ProctorSession.query.filter_by(session_uuid=session_uuid).first()
@@ -99,8 +130,7 @@ def proctor_heartbeat():
         event = ProctorEvent(
             proctor_session_id=proc_sess.id,
             event_type=event_type,
-            details=details,
-            frame_snapshot=frame if event_type in ['SCREEN_STOPPED', 'OCR_ALERT'] else None
+            details=details
         )
         db.session.add(event)
 
@@ -159,8 +189,7 @@ def admin_get_active_sessions():
             'status': s.status if not is_stale else 'OFFLINE',
             'is_screen_active': s.is_screen_active and not is_stale,
             'last_seen_seconds_ago': int((now - s.last_seen_at.replace(tzinfo=timezone.utc if s.last_seen_at.tzinfo is None else s.last_seen_at)).total_seconds()),
-            'recent_events': recent_events,
-            'current_frame': ACTIVE_FRAMES.get(s.session_uuid, '')
+            'recent_events': recent_events
         })
 
     return jsonify({'sessions': res, 'server_time': now.isoformat()})
