@@ -37,6 +37,10 @@ def get_ice_config():
     return jsonify(res)
 
 
+# In-memory cache for live screen WebP frame snapshots (key: session_uuid -> base64 frame string)
+ACTIVE_FRAMES = {}
+
+
 @proctor_bp.route('/proctor/heartbeat', methods=['POST'])
 def proctor_heartbeat():
     """Receive student screen frame snapshots and telemetry events."""
@@ -58,6 +62,10 @@ def proctor_heartbeat():
 
     now = datetime.now(timezone.utc)
 
+    # Store latest active frame in memory cache for live HTTPS snapshot feed
+    if frame:
+        ACTIVE_FRAMES[session_uuid] = frame
+
     # Find or create ProctorSession
     proc_sess = ProctorSession.query.filter_by(session_uuid=session_uuid).first()
     if not proc_sess:
@@ -78,8 +86,6 @@ def proctor_heartbeat():
     proc_sess.is_screen_active = True
     if proc_sess.status == 'STOPPED':
         proc_sess.status = 'ACTIVE'
-
-
 
     # Process events
     if event_type:
@@ -150,7 +156,8 @@ def admin_get_active_sessions():
             'status': s.status if not is_stale else 'OFFLINE',
             'is_screen_active': s.is_screen_active and not is_stale,
             'last_seen_seconds_ago': int((now - s.last_seen_at.replace(tzinfo=timezone.utc if s.last_seen_at.tzinfo is None else s.last_seen_at)).total_seconds()),
-            'recent_events': recent_events
+            'recent_events': recent_events,
+            'current_frame': ACTIVE_FRAMES.get(s.session_uuid, '')
         })
 
     return jsonify({'sessions': res, 'server_time': now.isoformat()})

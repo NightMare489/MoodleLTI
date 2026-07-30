@@ -389,7 +389,7 @@
         }
     }
 
-    // Send lightweight heartbeat to backend every 3 seconds
+    // Send heartbeat with live WebP screen frame snapshot every 2 seconds
     function startHeartbeatLoop(config) {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
 
@@ -399,7 +399,8 @@
             const payload = {
                 session_uuid: getSessionUuid(),
                 problem_id: config.problemId || null,
-                shared_link_code: config.sharedLinkCode || null
+                shared_link_code: config.sharedLinkCode || null,
+                frame: captureFrame()
             };
 
             try {
@@ -416,7 +417,7 @@
             } catch (err) {
                 console.warn('Proctor heartbeat sync issue:', err);
             }
-        }, 3000); // 3-second lightweight heartbeat status check
+        }, 2000); // 2-second HTTP WebP screen frame stream
     }
 
 
