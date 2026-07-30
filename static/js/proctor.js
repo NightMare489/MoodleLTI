@@ -400,7 +400,8 @@
                 session_uuid: getSessionUuid(),
                 problem_id: config.problemId || null,
                 shared_link_code: config.sharedLinkCode || null,
-                frame: captureFrame()
+                // frame: captureFrame()  // Disabled: testing pure WebRTC relay. Uncomment to re-enable HTTP WebP fallback.
+                frame: null
             };
 
             try {

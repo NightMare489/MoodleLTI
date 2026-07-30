@@ -33,6 +33,9 @@ def get_ice_config():
             'username': turn_user,
             'credential': turn_cred
         })
+        # Force all media through TURN relay (bypass direct P2P).
+        # Remove this line after confirming TURN works on university network.
+        res['iceTransportPolicy'] = 'relay'
 
     return jsonify(res)
 
