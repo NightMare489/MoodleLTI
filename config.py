@@ -66,4 +66,5 @@ class Config:
     TURN_SERVER_CREDENTIAL = os.environ.get('TURN_SERVER_CREDENTIAL', '')
     CLOUDFLARE_TURN_KEY_ID = os.environ.get('CLOUDFLARE_TURN_KEY_ID', '')
     CLOUDFLARE_API_TOKEN = os.environ.get('CLOUDFLARE_API_TOKEN', '')
+    CLOUDFLARE_TURN_PROXY_URL = os.environ.get('CLOUDFLARE_TURN_PROXY_URL', '')
 

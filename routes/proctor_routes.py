@@ -20,64 +20,44 @@ CF_TURN_CACHE = {'servers': None, 'expires_at': 0}
 
 @proctor_bp.route('/proctor/ice-config', methods=['GET'])
 def get_ice_config():
-    """Return ICE server configuration (STUN + TURN) for WebRTC connections."""
-    cf_key_id = current_app.config.get('CLOUDFLARE_TURN_KEY_ID', '') or current_app.config.get('TURN_SERVER_USERNAME', '')
-    cf_api_token = current_app.config.get('CLOUDFLARE_API_TOKEN', '') or current_app.config.get('TURN_SERVER_CREDENTIAL', '')
-    turn_url = current_app.config.get('TURN_SERVER_URL', '')
+    """Return ICE server configuration (Cloudflare TURN via Google Apps Script Proxy) for WebRTC connections."""
+    cf_key_id = current_app.config.get('CLOUDFLARE_TURN_KEY_ID', '')
+    cf_api_token = current_app.config.get('CLOUDFLARE_API_TOKEN', '')
+    proxy_url = current_app.config.get('CLOUDFLARE_TURN_PROXY_URL', '')
 
-    # 1. Dynamic Cloudflare Realtime TURN Generation
-    if cf_key_id and cf_api_token and not turn_url:
-        now = time.time()
-        if CF_TURN_CACHE['servers'] and now < CF_TURN_CACHE['expires_at']:
-            return jsonify({
-                'iceServers': CF_TURN_CACHE['servers'],
-                'iceTransportPolicy': 'relay'
-            })
-
-        try:
-            resp = requests.post(
-                f"https://rtc.live.cloudflare.com/v1/turn/keys/{cf_key_id}/credentials/generate-ice-servers",
-                headers={
-                    'Authorization': f"Bearer {cf_api_token}",
-                    'Content-Type': 'application/json'
-                },
-                json={'ttl': 86400},
-                timeout=5
-            )
-            if resp.status_code == 201:
-                data = resp.json()
-                if 'iceServers' in data:
-                    CF_TURN_CACHE['servers'] = data['iceServers']
-                    CF_TURN_CACHE['expires_at'] = now + 43200  # Cache for 12 hours
-                    return jsonify({
-                        'iceServers': data['iceServers'],
-                        'iceTransportPolicy': 'relay'
-                    })
-        except Exception as e:
-            current_app.logger.warning(f"Failed to fetch dynamic Cloudflare TURN credentials: {e}")
-
-    # 2. Static Cloudflare TURN Fallback Config
-    turn_user = current_app.config.get('TURN_SERVER_USERNAME', '')
-    turn_cred = current_app.config.get('TURN_SERVER_CREDENTIAL', '')
-
-    ice_servers = [
-        # {'urls': 'stun:stun.cloudflare.com:3478'}
-    ]
-
-    res = {
-        'iceServers': ice_servers,
-        'iceTransportPolicy': 'relay'
-    }
-
-    if turn_url and turn_user:
-        turn_urls = [u.strip() for u in turn_url.split(',') if u.strip()]
-        ice_servers.append({
-            'urls': turn_urls if len(turn_urls) > 1 else turn_urls[0],
-            'username': turn_user,
-            'credential': turn_cred
+    now = time.time()
+    if CF_TURN_CACHE['servers'] and now < CF_TURN_CACHE['expires_at']:
+        return jsonify({
+            'iceServers': CF_TURN_CACHE['servers'],
+            'iceTransportPolicy': 'relay'
         })
 
-    return jsonify(res)
+    if cf_key_id and cf_api_token and proxy_url:
+        try:
+            resp = requests.post(
+                proxy_url,
+                json={
+                    'action': 'generate_turn_credentials',
+                    'key_id': cf_key_id,
+                    'api_token': cf_api_token
+                },
+                timeout=10
+            )
+            data = resp.json()
+            if 'iceServers' in data:
+                CF_TURN_CACHE['servers'] = data['iceServers']
+                CF_TURN_CACHE['expires_at'] = now + 43200  # Cache for 12 hours
+                return jsonify({
+                    'iceServers': data['iceServers'],
+                    'iceTransportPolicy': 'relay'
+                })
+        except Exception as pe:
+            current_app.logger.error(f"Google Apps Script TURN proxy failed: {pe}")
+
+    return jsonify({
+        'iceServers': [],
+        'iceTransportPolicy': 'relay'
+    })
 
 
 @proctor_bp.route('/proctor/heartbeat', methods=['POST'])
