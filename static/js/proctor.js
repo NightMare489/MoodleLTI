@@ -367,7 +367,7 @@
         document.body.appendChild(badge);
     }
 
-    // Send heartbeat ping for session status every 2 seconds
+    // Send heartbeat ping for session status every 5 seconds
     function startHeartbeatLoop(config) {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
 
@@ -394,7 +394,7 @@
             } catch (err) {
                 console.warn('Proctor heartbeat sync issue:', err);
             }
-        }, 2000);
+        }, 5000);
     }
 
 

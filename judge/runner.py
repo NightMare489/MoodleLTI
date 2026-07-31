@@ -171,8 +171,8 @@ def run_test_case(executable_path, language, input_data, expected_output,
     else:
         cmd_list = shlex.split(run_cmd)
 
-    # Add a small buffer for interpreter startup overhead
-    effective_timeout = time_limit_s + 1.5
+    # Add a small buffer for OS/process overhead
+    effective_timeout = time_limit_s + 0.2
 
     try:
         import time as time_mod
@@ -310,7 +310,7 @@ def judge_submission(code, language, test_cases, time_limit_ms=2000, memory_limi
             'error': compilation error if any
         }
     """
-    time_limit_s = max(1, time_limit_ms // 1000)
+    time_limit_s = max(0.5, time_limit_ms / 1000.0)
     work_dir = tempfile.mkdtemp(prefix='judge_')
 
     try:
@@ -324,7 +324,7 @@ def judge_submission(code, language, test_cases, time_limit_ms=2000, memory_limi
                 'error': error,
             }
 
-        # Run each test case
+        # Run each test case (Early Exit on first non-AC verdict)
         results = []
         passed = 0
         overall_verdict = 'AC'
@@ -339,9 +339,10 @@ def judge_submission(code, language, test_cases, time_limit_ms=2000, memory_limi
 
             if result.verdict == 'AC':
                 passed += 1
-            elif overall_verdict == 'AC':
-                # Set overall verdict to first non-AC verdict
+            else:
                 overall_verdict = result.verdict
+                # Fail-Fast / Early Exit: Stop evaluating remaining test cases immediately on failure or TLE
+                break
 
         total = len(test_cases)
         score = passed / total if total > 0 else 0.0
