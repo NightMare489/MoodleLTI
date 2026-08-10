@@ -25,6 +25,47 @@ def get_cf_calls_config():
     return app_id, token
 
 
+def make_cf_calls_request(method, path, body=None):
+    """
+    Execute an HTTP request to Cloudflare Calls SFU API.
+    If CLOUDFLARE_CALLS_PROXY_URL is configured (e.g. on PythonAnywhere free tier),
+    it routes the request through the Google Apps Script proxy. Otherwise it makes a direct call.
+    """
+    app_id, token = get_cf_calls_config()
+    proxy_url = current_app.config.get('CLOUDFLARE_CALLS_PROXY_URL', '').strip()
+    url = f"{CLOUDFLARE_CALLS_API_BASE}{path.format(appId=app_id)}"
+
+    if proxy_url:
+        try:
+            payload = {
+                'action': 'cf_calls_request',
+                'url': url,
+                'method': method.lower(),
+                'api_token': token
+            }
+            if body is not None:
+                payload['body'] = body
+
+            resp = requests.post(proxy_url, json=payload, timeout=12)
+            if resp.status_code == 200:
+                res_data = resp.json()
+                if 'status_code' in res_data:
+                    return res_data['status_code'], res_data.get('data', {})
+        except Exception as pe:
+            current_app.logger.warning(f"Google Apps Script SFU proxy attempt failed, falling back to direct: {pe}")
+
+    # Direct request (Local development or unblocked environments)
+    headers = {'Authorization': f'Bearer {token}'}
+    if body is not None:
+        headers['Content-Type'] = 'application/json'
+        resp = requests.request(method, url, headers=headers, json=body, timeout=10)
+    else:
+        resp = requests.request(method, url, headers=headers, timeout=10)
+
+    data = resp.json() if resp.text else {}
+    return resp.status_code, data
+
+
 @proctor_bp.route('/proctor/ice-config', methods=['GET'])
 def get_ice_config():
     """Return ICE server configuration (Cloudflare STUN / TURN) for WebRTC connections."""
@@ -62,31 +103,23 @@ def sfu_publish_track():
     if not session_uuid or not sdp_offer:
         return jsonify({'error': 'Missing session_uuid or sdp offer'}), 400
 
-    headers = {
-        'Authorization': f'Bearer {token}'
-    }
-
     try:
         # 1. Create a new Session in Cloudflare Calls
-        sess_resp = requests.post(
-            f"{CLOUDFLARE_CALLS_API_BASE}/apps/{app_id}/sessions/new",
-            headers=headers,
-            timeout=10
+        sess_status, sess_data = make_cf_calls_request(
+            'POST',
+            f"/apps/{app_id}/sessions/new"
         )
-        if sess_resp.status_code != 201:
-            current_app.logger.error(f"Cloudflare Calls new session failed: {sess_resp.status_code} {sess_resp.text}")
-            return jsonify({'error': 'Failed to create SFU session on Cloudflare', 'details': sess_resp.text}), 502
+        if sess_status != 201 or not sess_data.get('sessionId'):
+            current_app.logger.error(f"Cloudflare Calls new session failed: {sess_status} {sess_data}")
+            return jsonify({'error': 'Failed to create SFU session on Cloudflare', 'details': sess_data}), 502
 
-        cf_session_id = sess_resp.json().get('sessionId')
+        cf_session_id = sess_data['sessionId']
 
         # 2. Add the local track with the student's SDP offer
-        track_resp = requests.post(
-            f"{CLOUDFLARE_CALLS_API_BASE}/apps/{app_id}/sessions/{cf_session_id}/tracks/new",
-            headers={
-                'Authorization': f'Bearer {token}',
-                'Content-Type': 'application/json'
-            },
-            json={
+        track_status, track_data = make_cf_calls_request(
+            'POST',
+            f"/apps/{app_id}/sessions/{cf_session_id}/tracks/new",
+            body={
                 'sessionDescription': {
                     'sdp': sdp_offer,
                     'type': 'offer'
@@ -98,15 +131,13 @@ def sfu_publish_track():
                         'trackName': track_name
                     }
                 ]
-            },
-            timeout=10
+            }
         )
 
-        if track_resp.status_code != 200:
-            current_app.logger.error(f"Cloudflare Calls add track failed: {track_resp.status_code} {track_resp.text}")
-            return jsonify({'error': 'Failed to register local track on SFU', 'details': track_resp.text}), 502
+        if track_status != 200:
+            current_app.logger.error(f"Cloudflare Calls add track failed: {track_status} {track_data}")
+            return jsonify({'error': 'Failed to register local track on SFU', 'details': track_data}), 502
 
-        track_data = track_resp.json()
         answer_desc = track_data.get('sessionDescription')
 
         # 3. Update or create ProctorSession record in database
@@ -175,31 +206,23 @@ def sfu_subscribe_track():
     if not cf_session_id:
         return jsonify({'error': 'Student track not available or screen sharing not active'}), 404
 
-    headers = {
-        'Authorization': f'Bearer {token}'
-    }
-
     try:
         # 1. Create a new subscriber session in Cloudflare Calls for this viewer
-        sess_resp = requests.post(
-            f"{CLOUDFLARE_CALLS_API_BASE}/apps/{app_id}/sessions/new",
-            headers=headers,
-            timeout=10
+        sess_status, sess_data = make_cf_calls_request(
+            'POST',
+            f"/apps/{app_id}/sessions/new"
         )
-        if sess_resp.status_code != 201:
-            current_app.logger.error(f"Cloudflare Calls new subscriber session failed: {sess_resp.status_code} {sess_resp.text}")
-            return jsonify({'error': 'Failed to create SFU subscriber session', 'details': sess_resp.text}), 502
+        if sess_status != 201 or not sess_data.get('sessionId'):
+            current_app.logger.error(f"Cloudflare Calls new subscriber session failed: {sess_status} {sess_data}")
+            return jsonify({'error': 'Failed to create SFU subscriber session', 'details': sess_data}), 502
 
-        admin_sub_session_id = sess_resp.json().get('sessionId')
+        admin_sub_session_id = sess_data['sessionId']
 
         # 2. Pull the remote track from the student's publisher session
-        track_resp = requests.post(
-            f"{CLOUDFLARE_CALLS_API_BASE}/apps/{app_id}/sessions/{admin_sub_session_id}/tracks/new",
-            headers={
-                'Authorization': f'Bearer {token}',
-                'Content-Type': 'application/json'
-            },
-            json={
+        track_status, track_data = make_cf_calls_request(
+            'POST',
+            f"/apps/{app_id}/sessions/{admin_sub_session_id}/tracks/new",
+            body={
                 'tracks': [
                     {
                         'location': 'remote',
@@ -207,15 +230,13 @@ def sfu_subscribe_track():
                         'trackName': cf_track_name
                     }
                 ]
-            },
-            timeout=10
+            }
         )
 
-        if track_resp.status_code != 200:
-            current_app.logger.error(f"Cloudflare Calls pull track failed: {track_resp.status_code} {track_resp.text}")
-            return jsonify({'error': 'Failed to pull track from SFU', 'details': track_resp.text}), 502
+        if track_status != 200:
+            current_app.logger.error(f"Cloudflare Calls pull track failed: {track_status} {track_data}")
+            return jsonify({'error': 'Failed to pull track from SFU', 'details': track_data}), 502
 
-        track_data = track_resp.json()
         offer_desc = track_data.get('sessionDescription')
 
         return jsonify({
@@ -250,24 +271,18 @@ def sfu_renegotiate_track():
     if not admin_session_id or not session_description:
         return jsonify({'error': 'Missing admin_session_id or sessionDescription'}), 400
 
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json'
-    }
-
     try:
-        resp = requests.put(
-            f"{CLOUDFLARE_CALLS_API_BASE}/apps/{app_id}/sessions/{admin_session_id}/renegotiate",
-            headers=headers,
-            json={
+        ren_status, ren_data = make_cf_calls_request(
+            'PUT',
+            f"/apps/{app_id}/sessions/{admin_session_id}/renegotiate",
+            body={
                 'sessionDescription': session_description
-            },
-            timeout=10
+            }
         )
 
-        if resp.status_code != 200:
-            current_app.logger.error(f"Cloudflare Calls renegotiate failed: {resp.status_code} {resp.text}")
-            return jsonify({'error': 'Failed to renegotiate SFU session', 'details': resp.text}), 502
+        if ren_status != 200:
+            current_app.logger.error(f"Cloudflare Calls renegotiate failed: {ren_status} {ren_data}")
+            return jsonify({'error': 'Failed to renegotiate SFU session', 'details': ren_data}), 502
 
         return jsonify({'success': True})
 
