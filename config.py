@@ -68,3 +68,7 @@ class Config:
     CLOUDFLARE_API_TOKEN = os.environ.get('CLOUDFLARE_API_TOKEN', '')
     CLOUDFLARE_TURN_PROXY_URL = os.environ.get('CLOUDFLARE_TURN_PROXY_URL', '')
 
+    # Cloudflare Calls (Realtime SFU)
+    CLOUDFLARE_CALLS_APP_ID = os.environ.get('CLOUDFLARE_CALLS_APP_ID', '')
+    CLOUDFLARE_CALLS_API_TOKEN = os.environ.get('CLOUDFLARE_CALLS_API_TOKEN', '')
+

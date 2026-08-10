@@ -206,8 +206,40 @@ def create_app(config_class=Config):
                     conn.commit()
                 app.logger.info("Migrated shared_links table: added screenshare_required column.")
 
+        # 4. Ensure proctor_sessions table has cf_session_id and cf_track_name columns
+        if 'proctor_sessions' in inspector.get_table_names():
+            columns = [c['name'] for c in inspector.get_columns('proctor_sessions')]
+            if 'cf_session_id' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE proctor_sessions ADD COLUMN cf_session_id VARCHAR(128)"))
+                    conn.commit()
+                app.logger.info("Migrated proctor_sessions table: added cf_session_id column.")
+            if 'cf_track_name' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE proctor_sessions ADD COLUMN cf_track_name VARCHAR(128)"))
+                    conn.commit()
+                app.logger.info("Migrated proctor_sessions table: added cf_track_name column.")
 
-        # 4. Seed system settings (current_semester)
+        # 5. Ensure problems table has solution_code, solution_language, code_template columns
+        if 'problems' in inspector.get_table_names():
+            columns = [c['name'] for c in inspector.get_columns('problems')]
+            if 'solution_code' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE problems ADD COLUMN solution_code TEXT DEFAULT ''"))
+                    conn.commit()
+                app.logger.info("Migrated problems table: added solution_code column.")
+            if 'solution_language' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE problems ADD COLUMN solution_language VARCHAR(20) DEFAULT 'c'"))
+                    conn.commit()
+                app.logger.info("Migrated problems table: added solution_language column.")
+            if 'code_template' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE problems ADD COLUMN code_template TEXT DEFAULT ''"))
+                    conn.commit()
+                app.logger.info("Migrated problems table: added code_template column.")
+
+        # 6. Seed system settings (current_semester)
         if 'system_settings' in inspector.get_table_names():
             with db.engine.connect() as conn:
                 res = conn.execute(text("SELECT 1 FROM system_settings WHERE key = 'current_semester'")).first()

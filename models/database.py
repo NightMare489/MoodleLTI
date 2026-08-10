@@ -177,6 +177,10 @@ class ProctorSession(db.Model):
     last_seen_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+    # Cloudflare Calls SFU Track Metadata
+    cf_session_id = db.Column(db.String(128), nullable=True)
+    cf_track_name = db.Column(db.String(128), nullable=True)
+
     user = db.relationship('User', backref='proctor_sessions')
     problem = db.relationship('Problem', backref='proctor_sessions')
     events = db.relationship('ProctorEvent', backref='proctor_session', lazy='dynamic', cascade='all, delete-orphan')

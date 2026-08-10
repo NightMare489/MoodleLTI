@@ -94,11 +94,10 @@
     </div>
 </div>
 
-<script>
-    let currentInspectSessionId = null;
+<script>    let currentInspectSessionId = null;
     let currentInspectUuid = null;
     let rtcConfig = null;
-    let gridPeerConnections = {};
+    let gridPeerConnections = {}; // key: session_uuid -> { pc, cfSessionId, isConnecting }
 
     async function getRtcConfig() {
         if (rtcConfig) return rtcConfig;
@@ -106,15 +105,13 @@
             const resp = await fetch('/proctor/ice-config');
             const data = await resp.json();
             rtcConfig = {
-                iceServers: data.iceServers || [],
-                ...(data.iceTransportPolicy ? { iceTransportPolicy: data.iceTransportPolicy } : {})
+                iceServers: data.iceServers || [{ urls: 'stun:stun.cloudflare.com:3478' }],
+                iceTransportPolicy: data.iceTransportPolicy || 'all'
             };
         } catch (e) {
             rtcConfig = {
-                iceServers: [
-                    // { urls: 'stun:stun.cloudflare.com:3478' }
-                ],
-                iceTransportPolicy: 'relay'
+                iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
+                iceTransportPolicy: 'all'
             };
         }
         return rtcConfig;
@@ -138,6 +135,8 @@
 
         if (!sessions || sessions.length === 0) {
             grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 4rem; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-lg); border: 1px dashed var(--border);"><h3>No Active Proctored Sessions</h3><p>Waiting for active student exam sessions to connect.</p></div>`;
+            document.getElementById('stat-active-count').innerText = '0';
+            document.getElementById('stat-stopped-count').innerText = '0';
             return;
         }
 
@@ -162,8 +161,6 @@
             </div>
         ` : '';
 
-            const frameSrc = s.current_frame ? s.current_frame : '';
-
             html += `
             <div class="card" id="card-sess-${s.session_uuid}" style="padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; border: ${isStopped ? '1px solid #ef4444;' : '1px solid var(--border);'} border-top: 3px solid ${isStopped ? '#ef4444' : '#10b981'}; transition: border 0.15s;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -175,7 +172,7 @@
                 </div>
                 <div style="position: relative; width: 100%; height: 220px; background: #000; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid #222; cursor: pointer;" onclick="inspectSession(${s.session_id}, '${s.session_uuid}', '${escapeHtml(s.student_name)}', '${escapeHtml(s.regnum)}', '${escapeHtml(s.problem_title)}')">
                     <video id="grid-video-${s.session_uuid}" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: contain; display: none;"></video>
-                    <div id="grid-fallback-${s.session_uuid}" style="position: absolute; color: #64748b; font-size: 0.825rem; text-align: center; pointer-events: none;">Connecting feed...</div>
+                    <div id="grid-fallback-${s.session_uuid}" style="position: absolute; color: #64748b; font-size: 0.825rem; text-align: center; pointer-events: none;">Connecting SFU feed...</div>
                     ${stoppedOverlayHtml}
                     <div style="position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.75); color: #94a3b8; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; z-index: 11;">Seen ${s.last_seen_seconds_ago}s ago</div>
                 </div>
@@ -186,7 +183,7 @@
         `;
         });
 
-        const currentSignature = sessions.map(s => `${s.session_uuid}:${s.status}:${s.is_screen_active}`).sort().join('|');
+        const currentSignature = sessions.map(s => `${s.session_uuid}:${s.status}:${s.is_screen_active}:${s.cf_session_id}`).sort().join('|');
         if (grid.getAttribute('data-signature') !== currentSignature) {
             grid.setAttribute('data-signature', currentSignature);
             grid.innerHTML = html;
@@ -195,75 +192,64 @@
         sessions.forEach(s => {
             const videoElem = document.getElementById(`grid-video-${s.session_uuid}`);
             const fallbackElem = document.getElementById(`grid-fallback-${s.session_uuid}`);
-            connectWebRTC(s.session_uuid, videoElem, fallbackElem);
+            connectWebRTC(s, videoElem, fallbackElem);
         });
 
         document.getElementById('stat-active-count').innerText = activeCount.toString();
         document.getElementById('stat-stopped-count').innerText = stoppedCount.toString();
     }
 
-    function markCardAsStopped(sessionUuid) {
-        const card = document.getElementById(`card-sess-${sessionUuid}`);
-        if (card) {
-            card.style.border = '1px solid #ef4444';
-            card.style.borderTop = '3px solid #ef4444';
-        }
-        const videoElem = document.getElementById(`grid-video-${sessionUuid}`);
-        const container = videoElem ? videoElem.parentElement : null;
-        if (container && !container.querySelector('.stopped-overlay')) {
-            const overlay = document.createElement('div');
-            overlay.className = 'stopped-overlay';
-            overlay.style.cssText = 'position: absolute; inset: 0; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(4px); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; padding: 1rem; text-align: center;';
-            overlay.innerHTML = `
-            <div style="font-size: 1.1rem; font-weight: 700; color: #f87171;">Sharing Stopped</div>
-            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">Student disconnected screen share</div>
-        `;
-            container.appendChild(overlay);
-        }
-    }
+    async function connectWebRTC(sessionData, videoElem, fallbackElem) {
+        const sessionUuid = sessionData.session_uuid;
+        const cfSessionId = sessionData.cf_session_id;
 
-    async function connectWebRTC(sessionUuid, videoElem, fallbackElem) {
+        // If screen share is inactive or no SFU session ID is available yet
+        if (!cfSessionId || !sessionData.is_screen_active || sessionData.status === 'STOPPED') {
+            if (gridPeerConnections[sessionUuid]) {
+                try { gridPeerConnections[sessionUuid].pc.close(); } catch (e) { }
+                delete gridPeerConnections[sessionUuid];
+            }
+            if (fallbackElem) fallbackElem.innerText = 'Stream offline';
+            return;
+        }
+
         const existing = gridPeerConnections[sessionUuid];
         if (existing) {
-            if (existing.connectionState === 'connected') {
-                const currentVideo = document.getElementById(`grid-video-${sessionUuid}`);
-                const currentImg = document.getElementById(`grid-img-${sessionUuid}`);
-                const currentFallback = document.getElementById(`grid-fallback-${sessionUuid}`);
-                const receivers = existing.getReceivers();
-                const videoReceiver = receivers.find(r => r.track && r.track.kind === 'video');
-                if (videoReceiver && videoReceiver.track && currentVideo) {
-                    if (!currentVideo.srcObject || !currentVideo.srcObject.active) {
-                        currentVideo.srcObject = new MediaStream([videoReceiver.track]);
-                        currentVideo.style.display = 'block';
-                        if (currentImg) currentImg.style.display = 'none';
-                        if (currentFallback) currentFallback.style.display = 'none';
-                        const container = currentVideo.parentElement;
-                        if (container) {
-                            const overlay = container.querySelector('.stopped-overlay');
-                            if (overlay) overlay.remove();
+            // Already connected to the current Cloudflare SFU session
+            if (existing.cfSessionId === cfSessionId && existing.pc) {
+                if (existing.pc.connectionState === 'connected') {
+                    if (videoElem && (!videoElem.srcObject || !videoElem.srcObject.active)) {
+                        const receivers = existing.pc.getReceivers();
+                        const vReceiver = receivers.find(r => r.track && r.track.kind === 'video');
+                        if (vReceiver && vReceiver.track) {
+                            videoElem.srcObject = new MediaStream([vReceiver.track]);
+                            videoElem.style.display = 'block';
+                            if (fallbackElem) fallbackElem.style.display = 'none';
                         }
                     }
+                    return;
                 }
-                return;
+                if (existing.isConnecting || existing.pc.connectionState === 'connecting') {
+                    return;
+                }
             }
-            if (['new', 'connecting'].includes(existing.connectionState)) {
-                sendWebRTCSignal(sessionUuid, 'student', 'request_offer', { request: true });
-                return;
-            }
-            try { existing.close(); } catch (e) { }
+            // Stream session changed or connection died -> close and re-subscribe
+            try { existing.pc.close(); } catch (e) { }
             delete gridPeerConnections[sessionUuid];
         }
 
         try {
             const config = await getRtcConfig();
             const pc = new RTCPeerConnection(config);
-            gridPeerConnections[sessionUuid] = pc;
+            gridPeerConnections[sessionUuid] = { pc, cfSessionId, isConnecting: true };
 
             pc.onconnectionstatechange = () => {
-                if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
-                    markCardAsStopped(sessionUuid);
-                    try { pc.close(); } catch (e) { }
-                    if (gridPeerConnections[sessionUuid] === pc) {
+                if (pc.connectionState === 'connected') {
+                    if (gridPeerConnections[sessionUuid]) {
+                        gridPeerConnections[sessionUuid].isConnecting = false;
+                    }
+                } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed' || pc.connectionState === 'disconnected') {
+                    if (gridPeerConnections[sessionUuid] && gridPeerConnections[sessionUuid].pc === pc) {
                         delete gridPeerConnections[sessionUuid];
                     }
                 }
@@ -271,14 +257,12 @@
 
             pc.ontrack = (event) => {
                 const currentVideo = document.getElementById(`grid-video-${sessionUuid}`);
-                const currentImg = document.getElementById(`grid-img-${sessionUuid}`);
                 const currentFallback = document.getElementById(`grid-fallback-${sessionUuid}`);
+                const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+
                 if (currentVideo) {
-                    currentVideo.srcObject = event.streams[0];
+                    currentVideo.srcObject = stream;
                     currentVideo.style.display = 'block';
-                }
-                if (currentImg) {
-                    currentImg.style.display = 'none';
                 }
                 if (currentFallback) {
                     currentFallback.style.display = 'none';
@@ -286,20 +270,93 @@
                 const card = document.getElementById(`card-sess-${sessionUuid}`);
                 if (card) {
                     card.style.border = '1px solid var(--border)';
-                    card.style.boxShadow = 'none';
-                    card.style.borderTop = '4px solid #10b981';
+                    card.style.borderTop = '3px solid #10b981';
                 }
                 const container = currentVideo ? currentVideo.parentElement : null;
                 if (container) {
                     const overlay = container.querySelector('.stopped-overlay');
                     if (overlay) overlay.remove();
                 }
+
+                // If currently inspecting this student in fullscreen, sync video stream immediately
+                if (currentInspectUuid === sessionUuid) {
+                    const modalVideo = document.getElementById('modal-video-stream');
+                    if (modalVideo) {
+                        modalVideo.srcObject = stream;
+                        modalVideo.style.display = 'block';
+                    }
+                }
             };
 
-            pc.onicecandidate = (e) => { if (e.candidate) sendWebRTCSignal(sessionUuid, 'student', 'candidate', e.candidate); };
-            sendWebRTCSignal(sessionUuid, 'student', 'request_offer', { request: true });
-            pollWebRTCSignals(sessionUuid, pc);
-        } catch (e) { }
+            // 1. Subscribe to student's track via Cloudflare Calls SFU
+            const subResp = await fetch('/admin/proctor/sfu/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_uuid: sessionUuid,
+                    cf_session_id: cfSessionId,
+                    cf_track_name: sessionData.cf_track_name || 'screen'
+                })
+            });
+
+            const subData = await subResp.json();
+            if (!subData.success || !subData.sessionDescription) {
+                console.warn('SFU Subscribe failed for session:', sessionUuid, subData);
+                if (gridPeerConnections[sessionUuid] && gridPeerConnections[sessionUuid].pc === pc) {
+                    delete gridPeerConnections[sessionUuid];
+                }
+                return;
+            }
+
+            // 2. Set Cloudflare's offer as Remote Description
+            await pc.setRemoteDescription(new RTCSessionDescription({
+                type: 'offer',
+                sdp: subData.sessionDescription.sdp
+            }));
+
+            // 3. Create WebRTC Answer
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            // 4. Wait for ICE candidate gathering
+            await new Promise((resolve) => {
+                if (pc.iceGatheringState === 'complete') {
+                    resolve();
+                } else {
+                    const check = () => {
+                        if (pc.iceGatheringState === 'complete') {
+                            pc.removeEventListener('icegatheringstatechange', check);
+                            resolve();
+                        }
+                    };
+                    pc.addEventListener('icegatheringstatechange', check);
+                    setTimeout(() => {
+                        pc.removeEventListener('icegatheringstatechange', check);
+                        resolve();
+                    }, 1200);
+                }
+            });
+
+            // 5. Submit Answer back to Cloudflare Calls SFU to finalize subscription
+            await fetch('/admin/proctor/sfu/renegotiate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    admin_session_id: subData.admin_session_id,
+                    sessionDescription: {
+                        type: 'answer',
+                        sdp: pc.localDescription.sdp
+                    }
+                })
+            });
+
+        } catch (err) {
+            console.error('SFU Subscription error for', sessionUuid, err);
+            if (gridPeerConnections[sessionUuid] && gridPeerConnections[sessionUuid].pc) {
+                try { gridPeerConnections[sessionUuid].pc.close(); } catch (e) { }
+                delete gridPeerConnections[sessionUuid];
+            }
+        }
     }
 
     function escapeHtml(str) {
@@ -331,51 +388,6 @@
         document.getElementById('inspection-modal').style.display = 'none';
     }
 
-    async function sendWebRTCSignal(sessionUuid, recipient, type, payload) {
-        fetch('/proctor/webrtc/signal', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_uuid: sessionUuid, recipient, type, payload })
-        }).catch(() => { });
-    }
-
-    function pollWebRTCSignals(sessionUuid, pc) {
-        const pendingCandidates = [];
-        const timer = setInterval(async () => {
-            if (!pc || gridPeerConnections[sessionUuid] !== pc || pc.connectionState === 'closed' || pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'connected') {
-                clearInterval(timer);
-                return;
-            }
-
-            try {
-                const resp = await fetch(`/proctor/webrtc/poll?session_uuid=${sessionUuid}&recipient=admin`);
-                const data = await resp.json();
-                if (data.signals && data.signals.length > 0) {
-                    for (const signal of data.signals) {
-                        if (signal.type === 'offer') {
-                            await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-                            const answer = await pc.createAnswer();
-                            await pc.setLocalDescription(answer);
-                            sendWebRTCSignal(sessionUuid, 'student', 'answer', answer);
-
-                            while (pendingCandidates.length > 0) {
-                                const cand = pendingCandidates.shift();
-                                try { await pc.addIceCandidate(cand); } catch (e) { }
-                            }
-                        } else if (signal.type === 'candidate' && signal.payload) {
-                            const candidate = new RTCIceCandidate(signal.payload);
-                            if (pc.remoteDescription && pc.remoteDescription.type) {
-                                try { await pc.addIceCandidate(candidate); } catch (e) { }
-                            } else {
-                                pendingCandidates.push(candidate);
-                            }
-                        }
-                    }
-                }
-            } catch (e) { }
-        }, 1000);
-    }
-
     // Export functions to global window scope for inline event handlers and SPA navigation
     window.inspectSession = inspectSession;
     window.closeInspectionModal = closeInspectionModal;
@@ -385,4 +397,4 @@
     fetchSessions();
     setInterval(fetchSessions, 4000);
 </script>
-{% endblock %}
+{% endblock %}

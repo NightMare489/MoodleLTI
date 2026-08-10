@@ -180,8 +180,8 @@
             // Start heartbeat loop for session status
             startHeartbeatLoop(config);
 
-            // Start listening for admin WebRTC request_offer signals
-            pollWebRTCSignals();
+            // Connect and publish screen track to Cloudflare Calls SFU
+            setupWebRTCBroadcaster(proctorStream);
 
         } catch (err) {
             console.error('Proctoring Error:', err);
@@ -192,145 +192,123 @@
         }
     }
 
-    // ── WebRTC Peer-to-Peer Video Broadcaster (60 FPS Ultra-Fast Engine) ───
+    // ── WebRTC SFU Video Broadcaster (Cloudflare Calls) ───
     let peerConnection = null;
     let rtcConfig = null;
+    let isBroadcasting = false;
 
-    // Fetch ICE server config (STUN + TURN) from backend
+    // Fetch ICE server config (STUN) from backend
     async function getRtcConfig() {
         if (rtcConfig) return rtcConfig;
         try {
             const resp = await fetch('/proctor/ice-config');
             const data = await resp.json();
             rtcConfig = {
-                iceServers: data.iceServers || [],
-                ...(data.iceTransportPolicy ? { iceTransportPolicy: data.iceTransportPolicy } : {})
+                iceServers: data.iceServers || [{ urls: 'stun:stun.cloudflare.com:3478' }],
+                iceTransportPolicy: data.iceTransportPolicy || 'all'
             };
         } catch (e) {
-            // Fallback config if fetch fails
             rtcConfig = {
-                iceServers: [
-                    // { urls: 'stun:stun.cloudflare.com:3478' }
-                ],
-                iceTransportPolicy: 'relay'
+                iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
+                iceTransportPolicy: 'all'
             };
         }
         return rtcConfig;
     }
 
     async function setupWebRTCBroadcaster(stream) {
+        if (!stream || !stream.active) return;
+        if (isBroadcasting && peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.connectionState === 'connecting')) {
+            return;
+        }
+
         try {
+            isBroadcasting = true;
             if (peerConnection) {
                 try { peerConnection.close(); } catch (e) { }
                 peerConnection = null;
             }
-            pollIntervalMs = 1000; // Reset signal polling interval for fast handshake
+
             const config = await getRtcConfig();
             peerConnection = new RTCPeerConnection(config);
 
-            stream.getTracks().forEach(track => {
-                const sender = peerConnection.addTrack(track, stream);
-                if (sender && sender.track && sender.track.kind === 'video') {
-                    try {
-                        const params = sender.getParameters();
-                        if (!params.encodings) params.encodings = [{}];
-                        params.encodings[0].maxBitrate = 600000; // 600 Kbps optimized for 480p 24 FPS
-                        params.degradationPreference = 'maintain-framerate';
-                        sender.setParameters(params).catch(() => { });
-                    } catch (e) { }
-                }
+            const videoTrack = stream.getVideoTracks()[0];
+            if (!videoTrack) return;
+
+            const transceiver = peerConnection.addTransceiver(videoTrack, {
+                direction: 'sendonly',
+                streams: [stream]
             });
 
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    sendWebRTCSignal('admin', 'candidate', event.candidate);
-                }
-            };
+            if (transceiver && transceiver.sender) {
+                try {
+                    const params = transceiver.sender.getParameters();
+                    if (!params.encodings) params.encodings = [{}];
+                    params.encodings[0].maxBitrate = 750000; // 750 Kbps for smooth 480p 24fps
+                    params.degradationPreference = 'maintain-framerate';
+                    transceiver.sender.setParameters(params).catch(() => { });
+                } catch (e) { }
+            }
 
             peerConnection.onconnectionstatechange = () => {
-                if (peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.connectionState === 'completed')) {
-                    if (pollTimer) {
-                        clearInterval(pollTimer);
-                        pollTimer = null;
+                if (peerConnection && (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected')) {
+                    console.warn('SFU connection state changed:', peerConnection.connectionState);
+                    if (isCaptured && stream && stream.active) {
+                        setTimeout(() => { setupWebRTCBroadcaster(stream); }, 3000);
                     }
-                } else if (peerConnection && (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected')) {
-                    pollWebRTCSignals();
                 }
             };
 
             // Create WebRTC Offer
-            const offer = await peerConnection.createOffer({
-                offerToReceiveVideo: false,
-                offerToReceiveAudio: false
-            });
+            const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
 
-            // Send offer to admin viewer
-            sendWebRTCSignal('admin', 'offer', offer);
-        } catch (err) {
-            console.warn('WebRTC Broadcast setup warning:', err);
-        }
-    }
+            // Wait for ICE gathering to complete so all candidates are included in the SDP
+            await new Promise((resolve) => {
+                if (peerConnection.iceGatheringState === 'complete') {
+                    resolve();
+                } else {
+                    const check = () => {
+                        if (peerConnection.iceGatheringState === 'complete') {
+                            peerConnection.removeEventListener('icegatheringstatechange', check);
+                            resolve();
+                        }
+                    };
+                    peerConnection.addEventListener('icegatheringstatechange', check);
+                    setTimeout(() => {
+                        peerConnection.removeEventListener('icegatheringstatechange', check);
+                        resolve();
+                    }, 1200);
+                }
+            });
 
-    async function sendWebRTCSignal(recipient, type, payload) {
-        try {
-            await fetch('/proctor/webrtc/signal', {
+            // Send Offer to Cloudflare Calls SFU through Flask Backend
+            const resp = await fetch('/proctor/sfu/publish', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     session_uuid: getSessionUuid(),
-                    recipient: recipient,
-                    type: type,
-                    payload: payload
+                    sdp: peerConnection.localDescription.sdp,
+                    mid: transceiver.mid || '0',
+                    track_name: 'screen'
                 })
             });
-        } catch (e) { }
-    }
 
-    let pollIntervalMs = 1000;
-    let pollTimer = null;
-
-    const pendingCandidates = [];
-
-    function pollWebRTCSignals() {
-        if (pollTimer) clearInterval(pollTimer);
-
-        pollTimer = setInterval(async function () {
-            // If connected, relax polling interval to 3 seconds to save 90% bandwidth
-            if (peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.connectionState === 'completed')) {
-                if (pollIntervalMs !== 3000) {
-                    pollIntervalMs = 3000;
-                    pollWebRTCSignals(); // Re-arm with 3s interval
-                    return;
-                }
+            const data = await resp.json();
+            if (data.success && data.sessionDescription && data.sessionDescription.sdp) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({
+                    type: 'answer',
+                    sdp: data.sessionDescription.sdp
+                }));
+                console.log('✅ Screen broadcast connected to Cloudflare Calls SFU');
+            } else {
+                console.warn('SFU Publish response:', data);
+                isBroadcasting = false;
             }
-
-            try {
-                const resp = await fetch(`/proctor/webrtc/poll?session_uuid=${getSessionUuid()}&recipient=student`);
-                const data = await resp.json();
-
-                if (data.signals && data.signals.length > 0) {
-                    for (const signal of data.signals) {
-                        if (signal.type === 'request_offer' && proctorStream) {
-                            setupWebRTCBroadcaster(proctorStream);
-                        } else if (signal.type === 'answer' && peerConnection) {
-                            await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.payload));
-                            while (pendingCandidates.length > 0) {
-                                const cand = pendingCandidates.shift();
-                                try { await peerConnection.addIceCandidate(cand); } catch (e) { }
-                            }
-                        } else if (signal.type === 'candidate' && signal.payload && peerConnection) {
-                            const candidate = new RTCIceCandidate(signal.payload);
-                            if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
-                                try { await peerConnection.addIceCandidate(candidate); } catch (e) { }
-                            } else {
-                                pendingCandidates.push(candidate);
-                            }
-                        }
-                    }
-                }
-            } catch (e) { }
-        }, pollIntervalMs);
+        } catch (err) {
+            console.error('SFU Broadcast setup error:', err);
+            isBroadcasting = false;
+        }
     }
 
 
