@@ -50,8 +50,9 @@ class Config:
     COMPILATION_TIMEOUT = int(os.environ.get('COMPILATION_TIMEOUT', '10'))  # seconds
     MAX_OUTPUT_SIZE = int(os.environ.get('MAX_OUTPUT_SIZE', '1048576'))  # 1MB
 
-    # Set JAVA_HOME to use a JDK that isn't on PATH (e.g. one unpacked in ~ on PythonAnywhere)
-    _JAVA_BIN = os.path.join(os.environ['JAVA_HOME'], 'bin', '') if os.environ.get('JAVA_HOME') else ''
+    # Set JUDGE_JAVA_HOME to use a JDK that isn't on PATH (e.g. one unpacked in ~).
+    # Not JAVA_HOME: hosts like PythonAnywhere preset that to a JRE without javac.
+    _JAVA_BIN = os.path.join(os.environ['JUDGE_JAVA_HOME'], 'bin', '') if os.environ.get('JUDGE_JAVA_HOME') else ''
 
     # Supported languages
     SUPPORTED_LANGUAGES = {
