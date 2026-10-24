@@ -50,6 +50,9 @@ class Config:
     COMPILATION_TIMEOUT = int(os.environ.get('COMPILATION_TIMEOUT', '10'))  # seconds
     MAX_OUTPUT_SIZE = int(os.environ.get('MAX_OUTPUT_SIZE', '1048576'))  # 1MB
 
+    # Set JAVA_HOME to use a JDK that isn't on PATH (e.g. one unpacked in ~ on PythonAnywhere)
+    _JAVA_BIN = os.path.join(os.environ['JAVA_HOME'], 'bin', '') if os.environ.get('JAVA_HOME') else ''
+
     # Supported languages
     SUPPORTED_LANGUAGES = {
         'c': {
@@ -57,6 +60,18 @@ class Config:
             'extension': '.c',
             'compile_cmd': 'gcc -o {output} {file} -lm -Dscanf_s=scanf',
             'run_cmd': '{output}',
+        },
+        'java': {
+            'name': 'Java (OpenJDK)',
+            'extension': '.java',
+            # -J-XX:TieredStopAtLevel=1 makes javac start noticeably faster on slow shared CPUs
+            'compile_cmd': _JAVA_BIN + 'javac -encoding UTF-8 -J-Xmx256m -J-XX:TieredStopAtLevel=1 -d . {file}',
+            # Runs in the work dir; {main_class} is detected from the source.
+            'run_cmd': _JAVA_BIN + 'java -Xmx{memory_mb}m -Xss64m -XX:+UseSerialGC -cp . {main_class}',
+            # The JVM reserves far more virtual memory than it uses, so an
+            # RLIMIT_AS cap kills it at startup; -Xmx bounds the heap instead.
+            'rlimit_as': False,
+            'extra_time_ms': 1000,  # JVM startup allowance
         },
     }
 

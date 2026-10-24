@@ -6,6 +6,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/theme-one_dark.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/mode-python.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/mode-c_cpp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/mode-java.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -57,6 +58,19 @@ Given an array of integers, find two numbers that add up to a target.
                     </div>
                 </div>
 
+                <div class="form-group">
+                    <label>Allowed Languages <span class="hint">(students can submit in any checked language)</span></label>
+                    {% set allowed = problem.get_allowed_languages(languages) if problem else ['c'] %}
+                    <div style="display:flex; gap:1.25rem; flex-wrap:wrap;">
+                        {% for key, lang in languages.items() %}
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="allowed_languages" value="{{ key }}" {{ 'checked' if key in allowed }}>
+                            <span>{{ lang.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
                 {% if problem %}
                 <div class="form-group">
                     <label class="checkbox-label">
@@ -67,8 +81,8 @@ Given an array of integers, find two numbers that add up to a target.
                 {% endif %}
 
                 <!-- Code Template & Solution (hidden textareas, synced by JS) -->
-                <input type="hidden" name="code_template" id="codeTemplateInput"
-                    value="{{ problem.code_template if problem else '' }}">
+                <input type="hidden" name="code_templates" id="codeTemplatesInput"
+                    value='{{ (problem.get_code_templates() if problem else {}) | tojson }}'>
                 <input type="hidden" name="solution_code" id="solutionCodeInput"
                     value="{{ problem.solution_code if problem else '' }}">
                 <input type="hidden" name="solution_language" id="solutionLangInput"
@@ -94,11 +108,23 @@ Given an array of integers, find two numbers that add up to a target.
             <h3>🔒 Code Template for Students</h3>
             <p class="text-secondary" style="font-size:0.9rem; margin-bottom:0.5rem;">
                 The initial code visible to students. Append <code>@lock</code> within a comment to make that line <b>uneditable</b>.
+                Each language has its own template; a language left empty gives students the default starter.
             </p>
+            <div class="form-group">
+                <label for="templateLangSelect">Language</label>
+                <select id="templateLangSelect" class="form-select" style="max-width:200px;">
+                    {% set allowed = problem.get_allowed_languages(languages) %}
+                    {% for key, lang in languages.items() %}
+                    <option value="{{ key }}" {{ 'selected' if key == (problem.solution_language if problem.solution_language in allowed else allowed[0]) }}>
+                        {{ lang.name }}{{ '' if key in allowed else ' (not allowed)' }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
             <div id="templateEditor" class="code-editor"
-                style="height:250px; border:1px solid var(--border); border-radius:8px;">{{ problem.code_template or '' }}</div>
+                style="height:250px; border:1px solid var(--border); border-radius:8px;"></div>
             <p class="text-secondary" style="margin-top:0.5rem; font-size:0.8rem;">
-                Example: <code>int add(int a, int b) { // @lock</code> or <code>def add(a, b): # @lock</code>
+                Example: <code>int add(int a, int b) { // @lock</code> or <code>static int add(int a, int b) { // @lock</code>
             </p>
         </div>
 
@@ -323,23 +349,45 @@ Given an array of integers, find two numbers that add up to a target.
         'python': 'ace/mode/python',
         'c': 'ace/mode/c_cpp',
         'cpp': 'ace/mode/c_cpp',
+        'java': 'ace/mode/java',
     };
 
     const solLangSelect = document.getElementById('solutionLangSelect');
-    
+
     function setEditorModes() {
         const mode = modeMap[solLangSelect.value] || 'ace/mode/c_cpp';
         solEditor.session.setMode(mode);
-        templateEditor.session.setMode(mode);
     }
-    
+
     setEditorModes();
     solLangSelect.addEventListener('change', setEditorModes);
+
+    // ── Per-language templates: one editor, content swapped on language change ──
+    const codeTemplates = JSON.parse(document.getElementById('codeTemplatesInput').value || '{}');
+    const templateLangSelect = document.getElementById('templateLangSelect');
+    let templateLang = templateLangSelect.value;
+    let switchingTemplate = false;  // suppresses the dirty flag for programmatic loads
+
+    function loadTemplate(lang) {
+        templateLang = lang;
+        switchingTemplate = true;
+        templateEditor.session.setMode(modeMap[lang] || 'ace/mode/c_cpp');
+        templateEditor.setValue(codeTemplates[lang] || '', -1);
+        templateEditor.getSession().setUndoManager(new ace.UndoManager());
+        switchingTemplate = false;
+    }
+
+    loadTemplate(templateLang);
+    templateLangSelect.addEventListener('change', function () {
+        codeTemplates[templateLang] = templateEditor.getValue();
+        loadTemplate(this.value);
+    });
 
     // Sync editors → hidden form fields before any form submit
     document.querySelectorAll('form').forEach(function (f) {
         f.addEventListener('submit', function () {
-            document.getElementById('codeTemplateInput').value = templateEditor.getValue();
+            codeTemplates[templateLang] = templateEditor.getValue();
+            document.getElementById('codeTemplatesInput').value = JSON.stringify(codeTemplates);
             document.getElementById('solutionCodeInput').value = solEditor.getValue();
             document.getElementById('solutionLangInput').value = solLangSelect.value;
         });
@@ -471,7 +519,7 @@ Given an array of integers, find two numbers that add up to a target.
     });
 
     if (typeof templateEditor !== 'undefined') {
-        templateEditor.on('change', function () { window.isFormDirty = true; });
+        templateEditor.on('change', function () { if (!switchingTemplate) window.isFormDirty = true; });
     }
     if (typeof solEditor !== 'undefined') {
         solEditor.on('change', function () { window.isFormDirty = true; });

@@ -6,6 +6,7 @@ Compares output against expected test case outputs.
 """
 
 import os
+import re
 import sys
 import json
 import shutil
@@ -65,7 +66,7 @@ def _get_resource_limiter_prefix():
     return []
 
 
-def _get_preexec_fn(memory_limit_mb):
+def _get_preexec_fn(memory_limit_mb, limit_address_space=True):
     """Return a preexec_fn for subprocess to set resource limits on Linux."""
     if sys.platform == 'win32':
         return None
@@ -73,8 +74,9 @@ def _get_preexec_fn(memory_limit_mb):
     def set_limits():
         import resource
         # Set memory limit (in bytes)
-        mem_bytes = memory_limit_mb * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
+        if limit_address_space:
+            mem_bytes = memory_limit_mb * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
         # Disable core dumps
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
         # Disable file creation beyond 10MB
@@ -83,12 +85,27 @@ def _get_preexec_fn(memory_limit_mb):
     return set_limits
 
 
+def _java_main_class(code):
+    """Pick the class name to run for a Java submission.
+
+    A public class must live in a file of the same name, so it wins.
+    Otherwise use the last class declared before `static void main`.
+    """
+    match = re.search(r'\bpublic\s+(?:final\s+|abstract\s+)*class\s+([A-Za-z_$][\w$]*)', code)
+    if match:
+        return match.group(1)
+    main_pos = code.find('static void main')
+    head = code[:main_pos] if main_pos >= 0 else code
+    classes = re.findall(r'\bclass\s+([A-Za-z_$][\w$]*)', head)
+    return classes[-1] if classes else 'Main'
+
+
 def compile_code(code, language, work_dir):
     """Compile code if needed.
 
     Args:
         code: Source code string
-        language: Language identifier ('python', 'c', 'cpp')
+        language: Language identifier ('c', 'java')
         work_dir: Working directory for compilation
 
     Returns:
@@ -99,7 +116,11 @@ def compile_code(code, language, work_dir):
         return False, '', f'Unsupported language: {language}'
 
     ext = lang_config['extension']
-    source_file = os.path.join(work_dir, f'solution{ext}')
+    if language == 'java':
+        main_class = _java_main_class(code)
+        source_file = os.path.join(work_dir, f'{main_class}{ext}')
+    else:
+        source_file = os.path.join(work_dir, f'solution{ext}')
 
     # Write source code to file
     with open(source_file, 'w', encoding='utf-8') as f:
@@ -132,6 +153,10 @@ def compile_code(code, language, work_dir):
         if result.returncode != 0:
             return False, '', result.stderr[:1000]
 
+        if language == 'java':
+            # The "executable" is the main class inside work_dir
+            return True, os.path.join(work_dir, main_class), ''
+
         return True, output_file, ''
 
     except subprocess.TimeoutExpired:
@@ -163,13 +188,18 @@ def run_test_case(executable_path, language, input_data, expected_output,
 
     # Build run command as a list (avoid shell=True for reliable killing)
     run_cmd = lang_config['run_cmd'].format(
-        file=executable_path, output=executable_path
+        file=executable_path, output=executable_path,
+        main_class=os.path.basename(executable_path),
+        memory_mb=memory_limit_mb,
     )
     import shlex
     if sys.platform == 'win32':
         cmd_list = run_cmd.split()
     else:
         cmd_list = shlex.split(run_cmd)
+
+    # Languages with slow startup (e.g. the JVM) get extra wall time
+    time_limit_s += lang_config.get('extra_time_ms', 0) / 1000.0
 
     # Add a small buffer for OS/process overhead
     effective_timeout = time_limit_s + 0.2
@@ -189,7 +219,8 @@ def run_test_case(executable_path, language, input_data, expected_output,
         if sys.platform == 'win32':
             kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
-            kwargs['preexec_fn'] = _get_preexec_fn(memory_limit_mb)
+            kwargs['preexec_fn'] = _get_preexec_fn(
+                memory_limit_mb, lang_config.get('rlimit_as', True))
             kwargs['start_new_session'] = True
 
         start_time = time_mod.time()

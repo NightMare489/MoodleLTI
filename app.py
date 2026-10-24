@@ -238,6 +238,16 @@ def create_app(config_class=Config):
                     conn.execute(text("ALTER TABLE problems ADD COLUMN code_template TEXT DEFAULT ''"))
                     conn.commit()
                 app.logger.info("Migrated problems table: added code_template column.")
+            if 'code_templates' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE problems ADD COLUMN code_templates TEXT DEFAULT ''"))
+                    conn.commit()
+                app.logger.info("Migrated problems table: added code_templates column.")
+            if 'allowed_languages' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE problems ADD COLUMN allowed_languages VARCHAR(255) DEFAULT 'c'"))
+                    conn.commit()
+                app.logger.info("Migrated problems table: added allowed_languages column.")
 
         # 6. Seed system settings (current_semester)
         if 'system_settings' in inspector.get_table_names():

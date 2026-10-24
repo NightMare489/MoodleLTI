@@ -72,6 +72,30 @@ def dashboard():
 
 # ── Create / Edit Problem ────────────────────────────────────────────
 
+def _allowed_languages_from_form():
+    """Comma-separated allowed language keys from the form's checkboxes."""
+    supported = current_app.config['SUPPORTED_LANGUAGES']
+    keys = [k for k in request.form.getlist('allowed_languages') if k in supported]
+    if not keys:
+        flash('No language selected; defaulting to the solution language.', 'error')
+        lang = request.form.get('solution_language', 'c')
+        keys = [lang if lang in supported else 'c']
+    return ','.join(keys)
+
+
+def _code_templates_from_form():
+    """JSON map of language -> starter template from the form's hidden field."""
+    supported = current_app.config['SUPPORTED_LANGUAGES']
+    try:
+        raw = json.loads(request.form.get('code_templates') or '{}')
+    except ValueError:
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    templates = {k: v.strip() for k, v in raw.items()
+                 if k in supported and isinstance(v, str) and v.strip()}
+    return json.dumps(templates)
+
 @admin_bp.route('/problem/new', methods=['GET', 'POST'])
 @require_instructor
 def new_problem():
@@ -84,7 +108,8 @@ def new_problem():
             memory_limit_mb=int(request.form.get('memory_limit_mb', 256)),
             solution_code=request.form.get('solution_code', '').strip(),
             solution_language=request.form.get('solution_language', 'c'),
-            code_template=request.form.get('code_template', '').strip(),
+            code_templates=_code_templates_from_form(),
+            allowed_languages=_allowed_languages_from_form(),
             created_by=session['user_id'],
         )
         db.session.add(problem)
@@ -111,7 +136,8 @@ def edit_problem(problem_id):
         problem.is_active = 'is_active' in request.form
         problem.solution_code = request.form.get('solution_code', '').strip()
         problem.solution_language = request.form.get('solution_language', 'c')
-        problem.code_template = request.form.get('code_template', '').strip()
+        problem.code_templates = _code_templates_from_form()
+        problem.allowed_languages = _allowed_languages_from_form()
         db.session.commit()
         flash('Problem updated successfully!', 'success')
         return _token_redirect('admin.edit_problem', problem_id=problem.id)

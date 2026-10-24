@@ -132,7 +132,8 @@ def view_problem(problem_id):
         problem_id=problem_id, is_sample=True
     ).order_by(TestCase.order).all()
 
-    languages = current_app.config['SUPPORTED_LANGUAGES']
+    supported = current_app.config['SUPPORTED_LANGUAGES']
+    languages = {k: supported[k] for k in problem.get_allowed_languages(supported)}
 
     # Get user's previous submissions
     user_id = session['user_id']
@@ -164,7 +165,10 @@ def api_get_problem(problem_id):
         'description': problem.description,
         'time_limit_ms': problem.time_limit_ms,
         'memory_limit_mb': problem.memory_limit_mb,
-        'code_template': problem.code_template or '',
+        'code_template': problem.get_code_template(problem.solution_language),
+        'code_templates': problem.get_code_templates(),
+        'solution_language': problem.solution_language,
+        'allowed_languages': problem.get_allowed_languages(current_app.config['SUPPORTED_LANGUAGES']),
         'latest_code': latest_sub.code if latest_sub else '',
         'latest_language': latest_sub.language if latest_sub else 'c',
         'sample_cases': [{
@@ -239,12 +243,12 @@ def submit_code(problem_id):
         flash('Please enter your code.', 'error')
         return _token_redirect('student.view_problem', problem_id=problem_id)
 
-    if language not in current_app.config['SUPPORTED_LANGUAGES']:
-        flash('Unsupported language.', 'error')
+    if language not in problem.get_allowed_languages(current_app.config['SUPPORTED_LANGUAGES']):
+        flash('This language is not allowed for this problem.', 'error')
         return _token_redirect('student.view_problem', problem_id=problem_id)
 
-    # Validate locked lines template compliance
-    is_valid, err_msg = _verify_locked_lines(code, problem.code_template)
+    # Validate locked lines against the submitted language's template
+    is_valid, err_msg = _verify_locked_lines(code, problem.get_code_template(language))
     if not is_valid:
         flash(err_msg, 'error')
         return _token_redirect('student.view_problem', problem_id=problem_id)

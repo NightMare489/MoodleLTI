@@ -1,3 +1,4 @@
+import json
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timezone
 
@@ -48,7 +49,9 @@ class Problem(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     solution_code = db.Column(db.Text, default='')       # correct solution for generator
     solution_language = db.Column(db.String(20), default='c')
-    code_template = db.Column(db.Text, default='')       # template with lock markers
+    code_template = db.Column(db.Text, default='')       # legacy single template (solution language)
+    code_templates = db.Column(db.Text, default='')      # JSON {language: template with lock markers}
+    allowed_languages = db.Column(db.String(255), default='c')  # comma-separated language keys
 
     test_cases = db.relationship('TestCase', backref='problem', lazy='dynamic',
                                  cascade='all, delete-orphan')
@@ -56,6 +59,29 @@ class Problem(db.Model):
                              cascade='all, delete-orphan')
     submissions = db.relationship('Submission', backref='problem', lazy='dynamic')
     creator = db.relationship('User', backref='created_problems')
+
+    def get_allowed_languages(self, supported):
+        """Allowed language keys, in `supported` order; falls back to the solution language."""
+        allowed = set((self.allowed_languages or '').split(','))
+        keys = [k for k in supported if k in allowed]
+        if not keys:
+            keys = [self.solution_language if self.solution_language in supported else next(iter(supported))]
+        return keys
+
+    def get_code_templates(self):
+        """Per-language starter templates; pre-existing problems map their
+        single legacy template to the solution language."""
+        if self.code_templates:
+            try:
+                return json.loads(self.code_templates)
+            except ValueError:
+                return {}
+        if self.code_template:
+            return {self.solution_language or 'c': self.code_template}
+        return {}
+
+    def get_code_template(self, language):
+        return self.get_code_templates().get(language, '')
 
     def __repr__(self):
         return f'<Problem {self.title}>'
