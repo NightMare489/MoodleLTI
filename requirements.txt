@@ -9,3 +9,5 @@ psycopg2-binary==2.9.10
 markdown2==2.5.3
 bleach==6.2.0
 python-dotenv==1.0.1
+openpyxl==3.1.5
+pypdf==6.10.2

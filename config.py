@@ -42,6 +42,15 @@ class Config:
     LTI_KEY = os.environ.get('LTI_KEY', 'moodle-judge-key')
     LTI_SECRET = os.environ.get('LTI_SECRET', 'moodle-judge-secret')
 
+    # Exam paper viewer (separate from the judge).  Each set is a folder
+    # PAPERS_DIR/<set_name>/ holding exam.pdf (full scan) and marks.xlsx
+    # ("PDF Page" + "Reg. Number" columns).  Keep it outside static/: students
+    # only ever receive their own pages via /papers/view.
+    PAPERS_DIR = os.environ.get('PAPERS_DIR', os.path.join(BASE_DIR, 'papers_private'))
+    PAPERS_DEFAULT_SET = os.environ.get('PAPERS_DEFAULT_SET', 'ccs1101_quiz1')
+    PAPER_PAGES_PER_STUDENT = int(os.environ.get('PAPER_PAGES_PER_STUDENT', '2'))
+    PAPER_LINK_MAX_AGE = int(os.environ.get('PAPER_LINK_MAX_AGE', '7200'))  # seconds
+
     # Grade proxy – set to your Google Apps Script web-app URL
     GRADE_PROXY_URL = os.environ.get('GRADE_PROXY_URL', 'https://script.google.com/macros/s/AKfycbx0ZepXCbDFzFNjYS-TqdC9K8-iyxexF4soU7UwDa9Jm3SkFjYqgCv_f1inhOS1d9CIHQ/exec')
 

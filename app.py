@@ -27,11 +27,13 @@ def create_app(config_class=Config):
     from routes.admin_routes import admin_bp
     from routes.student_routes import student_bp
     from routes.proctor_routes import proctor_bp
+    from routes.paper_routes import paper_bp
 
     app.register_blueprint(lti_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(student_bp)
     app.register_blueprint(proctor_bp)
+    app.register_blueprint(paper_bp)
 
     # ------------------------------------------------------------------
     # Cookie-less session fallback via signed URL token (_lt param).

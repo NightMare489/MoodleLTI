@@ -54,3 +54,8 @@ htmlcov/
 migrations/versions/
 # You should include the initial migrations folder, but ignore subsequent auto-generated version files
 
+
+# Student exam papers / marks — never commit (upload to the server manually)
+papers_private/
+*.pdf
+*.xlsx

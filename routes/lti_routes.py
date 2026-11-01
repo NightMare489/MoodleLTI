@@ -72,6 +72,12 @@ def launch():
     # Extract user data
     user_data = extract_lti_user_data(params)
 
+    # Exam paper viewer: a separate activity using the same LTI key.
+    # It doesn't touch the judge's users/sessions at all.
+    if params.get('custom_paper_set'):
+        from routes.paper_routes import handle_paper_launch
+        return handle_paper_launch(params, user_data)
+
     # Find or create user
     user = User.query.filter_by(lti_user_id=user_data['lti_user_id']).first()
 
